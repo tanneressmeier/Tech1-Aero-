@@ -1,0 +1,24 @@
+type EventHandler = (...args: any[]) => void;
+
+class EventEmitter {
+  private events: Record<string, EventHandler[]> = {};
+
+  on(event: string, listener: EventHandler): void {
+    if (!this.events[event]) {
+      this.events[event] = [];
+    }
+    this.events[event].push(listener);
+  }
+
+  off(event: string, listener: EventHandler): void {
+    if (!this.events[event]) return;
+    this.events[event] = this.events[event].filter(l => l !== listener);
+  }
+
+  emit(event: string, ...args: any[]): void {
+    if (!this.events[event]) return;
+    this.events[event].forEach(listener => listener(...args));
+  }
+}
+
+export const eventEmitter = new EventEmitter();

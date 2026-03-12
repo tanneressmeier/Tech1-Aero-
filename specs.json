@@ -1,0 +1,104 @@
+{
+  "projectName": "Tech1 Aero Optimization",
+  "missionStatement": "To develop a comprehensive, AI-driven platform for aircraft maintenance management that serves as the single source of truth for all maintenance operations, replacing inefficient spreadsheet-based workflows.",
+  "goalsAndObjectives": {
+    "primaryGoals": [
+      "Centralize all maintenance operations onto a single, authoritative platform.",
+      "Enhance operational efficiency through intelligent automation and streamlined UX.",
+      "Ensure regulatory compliance and safety with robust, auditable tracking."
+    ],
+    "coreObjectives": [
+      "Eliminate spreadsheet-based workflows for scheduling and resource management.",
+      "Automate maintenance planning using AI to optimize schedules and de-conflict resources.",
+      "Streamline the entire maintenance lifecycle from high-level Work Orders to granular Squawks.",
+      "Empower technicians, leads, and administrators with role-specific tools and information."
+    ]
+  },
+  "architectureAndTechnologyStack": {
+    "frontend": {
+      "framework": "React v19 with TypeScript",
+      "styling": "Tailwind CSS",
+      "ui_ux": "Professional, dark-themed aesthetic prioritizing data density and clarity for an enterprise application."
+    },
+    "aiEngine": {
+      "provider": "Google Gemini API",
+      "model": "gemini-2.5-flash",
+      "usage": [
+        "Schedule Optimization",
+        "Data Cleansing & Validation (ETL)",
+        "Multimodal Document Processing (Packing Slips)"
+      ]
+    },
+    "backend_future": {
+      "services": "Microservices architecture using Node.js or Python (FastAPI)",
+      "database": "PostgreSQL (relational core), Redis (caching), Elasticsearch (search)",
+      "hosting": "Kubernetes on a major cloud provider (AWS/GCP/Azure)"
+    }
+  },
+  "functionalModules": [
+    {
+      "moduleName": "Fleet Management",
+      "goal": "Provide a high-level overview of all aircraft and serve as the entry point for AI-driven planning.",
+      "features": [
+        "Aircraft dashboard with master-detail view.",
+        "AI-powered schedule optimization to generate de-conflicted maintenance visit plans.",
+        "Digital logbook for tracking flight hours and maintenance entries."
+      ]
+    },
+    {
+      "moduleName": "Work Order & Repair Order Management",
+      "goal": "Manage the lifecycle of all planned (Work Orders) and unplanned (Repair Orders) maintenance.",
+      "features": [
+        "Dedicated dashboards with searchable and sortable lists for each order type.",
+        "Color-coded status indicators for at-a-glance information.",
+        "Drill-down to detailed views for managing individual tasks (Squawks)."
+      ]
+    },
+    {
+      "moduleName": "Squawk (Task) Management",
+      "goal": "Provide a powerful, centralized interface for all granular maintenance execution activities.",
+      "features": [
+        "Tabbed interface for managing individual Squawks within an order.",
+        "Multi-faceted detail view for each Squawk: Item Details, Service (time tracking), Parts, and Tools.",
+        "Comprehensive, permission-based digital signature and sign-off workflow."
+      ]
+    },
+    {
+      "moduleName": "Resource & Logistics Management",
+      "goal": "Maintain real-time inventory accuracy, track tooling, and streamline procurement.",
+      "features": [
+        "Inventory dashboards for Parts and Consumables.",
+        "Purchase Order generation workflow from low-stock items.",
+        "AI-Powered Receiving: Gemini API analyzes uploaded packing slip images to extract data and update inventory.",
+        "Tooling dashboard with calibration tracking and vendor quote generation."
+      ]
+    },
+    {
+      "moduleName": "Personnel Management",
+      "goal": "Manage the technician roster and track labor productivity.",
+      "features": [
+        "Technician roster with certifications and productivity metrics.",
+        "Live clock-in/clock-out functionality.",
+        "Data visualization (bar chart) to compare total vs. billable hours."
+      ]
+    },
+    {
+      "moduleName": "Data Migration Hub",
+      "goal": "Automate and de-risk the process of migrating data from legacy spreadsheets.",
+      "features": [
+        "AI-Powered Data Cleansing using Gemini to validate, correct, and structure uploaded CSV data for Work Orders, Tooling, and Consumables.",
+        "Interactive staging area for user review before committing data to the live system."
+      ]
+    }
+  ],
+  "progressAndFutureImprovements": {
+    "currentState": "A feature-complete frontend prototype with a polished UI/UX. All core AI features are implemented. State is managed locally in React.",
+    "nextSteps": [
+      "Develop backend services (API, database) to replace local state management.",
+      "Implement a robust authentication and role-based access control (RBAC) system.",
+      "Integrate WebSockets for real-time application updates.",
+      "Expand AI capabilities (e.g., predictive maintenance, natural language querying).",
+      "Build a dedicated reporting and analytics dashboard."
+    ]
+  }
+}

@@ -1,0 +1,389 @@
+openapi: 3.0.0
+info:
+  title: Tech1 Aero Optimization API
+  version: 1.0.0
+  description: The RESTful API for the Tech1 Aero Optimization platform. It provides endpoints for managing aircraft, maintenance orders, inventory, personnel, and more.
+servers:
+  - url: https://api.tech1.aero/v1
+    description: Production Server
+  - url: http://localhost:8080/v1
+    description: Development Server
+
+paths:
+  /aircraft:
+    get:
+      summary: List all aircraft
+      tags: [Aircraft]
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+        - $ref: '#/components/parameters/SortBy'
+        - $ref: '#/components/parameters/SortOrder'
+        - in: query
+          name: model
+          schema:
+            type: string
+          description: Filter by aircraft model
+      responses:
+        '200':
+          description: A paginated list of aircraft.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Aircraft'
+    post:
+      summary: Create a new aircraft
+      tags: [Aircraft]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Aircraft'
+      responses:
+        '201':
+          description: Aircraft created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Aircraft'
+        '400':
+          description: Invalid input
+
+  /aircraft/{aircraftId}:
+    get:
+      summary: Get an aircraft by ID
+      tags: [Aircraft]
+      parameters:
+        - name: aircraftId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Aircraft'
+        '404':
+          description: Aircraft not found
+    put:
+      summary: Update an existing aircraft
+      tags: [Aircraft]
+      parameters:
+        - name: aircraftId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Aircraft'
+      responses:
+        '200':
+          description: Aircraft updated
+        '404':
+          description: Aircraft not found
+    delete:
+      summary: Delete an aircraft
+      tags: [Aircraft]
+      parameters:
+        - name: aircraftId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Aircraft deleted
+        '404':
+          description: Aircraft not found
+
+  /aircraft/{aircraftId}/logbook:
+    get:
+      summary: Get logbook entries for an aircraft
+      tags: [Aircraft, Logbook]
+      parameters:
+        - name: aircraftId
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: A list of logbook entries.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LogbookEntry'
+        '404':
+          description: Aircraft not found
+
+  /work-orders:
+    get:
+      summary: List all work orders
+      tags: [Work Orders]
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: ['Pending', 'In Progress', 'Completed', 'On Hold', 'Cancelled']
+          description: Filter by work order status
+      responses:
+        '200':
+          description: A paginated list of work orders.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/WorkOrder'
+  
+  /work-orders/{woId}/squawks:
+    get:
+      summary: Get all squawks for a work order
+      tags: [Work Orders, Squawks]
+      parameters:
+        - name: woId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: A list of squawks
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Squawk'
+        '404':
+          description: Work Order not found
+
+  /tools:
+    get:
+      summary: List all tools
+      tags: [Tooling]
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+        - in: query
+          name: calibrationStatus
+          schema:
+            type: string
+            enum: ['valid', 'due_soon', 'overdue']
+          description: Filter tools by their calibration status
+      responses:
+        '200':
+          description: A list of tools.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Tool'
+
+  # Add similar comprehensive CRUD and relational endpoints for:
+  # - /repair-orders
+  # - /repair-orders/{roId}/squawks
+  # - /inventory (with filters for storage_area)
+  # - /personnel (technicians)
+  # - /purchase-orders
+
+components:
+  parameters:
+    Limit:
+      in: query
+      name: limit
+      schema:
+        type: integer
+        default: 25
+      description: Number of items to return
+    Offset:
+      in: query
+      name: offset
+      schema:
+        type: integer
+        default: 0
+      description: Number of items to skip for pagination
+    SortBy:
+      in: query
+      name: sortBy
+      schema:
+        type: string
+      description: Field to sort by
+    SortOrder:
+      in: query
+      name: sortOrder
+      schema:
+        type: string
+        enum: [asc, desc]
+        default: asc
+      description: Sort order
+  
+  schemas:
+    Aircraft:
+      type: object
+      properties:
+        id:
+          type: string
+          readOnly: true
+        tail_number:
+          type: string
+        model:
+          type: string
+        make:
+          type: string
+        serial_number:
+          type: string
+        hours_total:
+          type: number
+          format: float
+        maintenance_events:
+          type: array
+          items:
+            $ref: '#/components/schemas/MaintenanceEvent'
+        logbook_entries:
+          type: array
+          items:
+            $ref: '#/components/schemas/LogbookEntry'
+    
+    MaintenanceEvent:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        intervalType:
+          type: string
+          enum: [hours, days]
+        intervalValue:
+          type: integer
+        lastPerformedHours:
+          type: number
+          format: float
+        lastPerformedDate:
+          type: string
+          format: date
+        manHours:
+          type: number
+
+    LogbookEntry:
+      type: object
+      properties:
+        entry_id:
+          type: string
+        aircraft_id:
+          type: string
+        entry_date:
+          type: string
+          format: date-time
+        description:
+          type: string
+        flight_hours:
+          type: number
+          format: float
+        recorded_by:
+          type: string
+
+    WorkOrder:
+      type: object
+      properties:
+        wo_id:
+          type: string
+          readOnly: true
+        aircraft_id:
+          type: string
+        aircraft_tail_number:
+          type: string
+        visit_name:
+          type: string
+        scheduled_date:
+          type: string
+          format: date
+        status:
+          type: string
+          enum: ['Pending', 'In Progress', 'Completed', 'On Hold', 'Cancelled']
+        priority:
+          type: string
+          enum: ['routine', 'urgent', 'aog']
+        squawks:
+          type: array
+          items:
+            $ref: '#/components/schemas/Squawk'
+
+    Squawk:
+      type: object
+      properties:
+        squawk_id:
+          type: string
+        description:
+          type: string
+        status:
+          type: string
+          enum: ['open', 'in_progress', 'completed', 'on_hold']
+        priority:
+          type: string
+          enum: ['routine', 'urgent', 'aog']
+        resolution:
+          type: string
+        signatures:
+          type: object
+          properties:
+            work_complete:
+              $ref: '#/components/schemas/Signature'
+            operational_check:
+              $ref: '#/components/schemas/Signature'
+            inspector:
+              $ref: '#/components/schemas/Signature'
+            return_to_service:
+              $ref: '#/components/schemas/Signature'
+        # ... other properties from types.ts
+        
+    Signature:
+      type: object
+      properties:
+        technician_id:
+          type: string
+        signed_at:
+          type: string
+          format: date-time
+          
+    Tool:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        calibrationRequired:
+          type: boolean
+        calibrationDueDate:
+          type: string
+          format: date
+
+    # ... and so on for all other types from types.ts (RepairOrder, InventoryItem, etc.)
+
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: jwt

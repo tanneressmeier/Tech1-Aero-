@@ -1,0 +1,5 @@
+{
+  "name": "Tech1 Aero Optimization",
+  "description": "Goal: To create a comprehensive, AI-driven platform for aircraft maintenance management. The primary mission is to transform complex maintenance requirements into an efficient, executable plan that minimizes aircraft downtime, ensures regulatory compliance, and provides granular tracking of all associated resources (man-hours, parts, tools, and consumables).\nCore Value Propositions:\nIntelligent Scheduling: Leverage the Gemini API to optimize maintenance schedules, reducing ground time and operational costs.\nCentralized Tracking: Serve as a single source of truth for all maintenance activities, from high-level fleet planning to individual technician time logs.\nCompliance & Safety: Ensure tool calibration is tracked and maintenance events are never missed through automated alerts and clear visual indicators.\nOperational Efficiency: Streamline the entire workflow from planning to execution, quoting, and resource management.\n",
+  "requestFramePermissions": []
+}
