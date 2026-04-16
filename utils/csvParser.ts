@@ -23,6 +23,17 @@ function parseCSV<T>(csvText: string, mapFn: (row: Record<string, string>, index
 
 export function parseToolsFromCSV(csvText: string): Tool[] {
     return parseCSV(csvText, (row): Tool => {
+        const calRequired = row.ToolType === 'Cert';
+        const calDate = row.CalibrationDueNextDate || undefined;
+        const calDays = calDate
+            ? Math.round((new Date(calDate).getTime() - Date.now()) / 86400000)
+            : undefined;
+        const calStatus: Tool['calibrationStatus'] = !calRequired
+            ? 'N/A'
+            : calDays === undefined
+                ? 'N/A'
+                : calDays > 0 ? 'Good' : 'Needs Calibration';
+
         return {
             id: row.Name || `tool-${row.ID}`,
             name: row.Name,
@@ -31,10 +42,12 @@ export function parseToolsFromCSV(csvText: string): Tool[] {
             make: row.Make || null,
             model: row.Model || null,
             serial: row.Serial || null,
-            calibrationRequired: row.ToolType === 'Cert',
-            calibrationDueDate: row.CalibrationDueNextDate || undefined,
+            calibrationRequired: calRequired,
+            calibrationDueDate: calDate,
+            calibrationDueDays: calDays,
+            calibrationStatus: calStatus,
+            category: row.ToolType === 'Cert' ? 'Certified' : 'Reference',
             vendorPrices: {
-                // Mock data, as it's not in the CSV
                 bhd: Math.random() > 0.5 ? parseFloat((Math.random() * 200 + 50).toFixed(2)) : undefined,
                 continental: Math.random() > 0.5 ? parseFloat((Math.random() * 200 + 50).toFixed(2)) : undefined,
             },

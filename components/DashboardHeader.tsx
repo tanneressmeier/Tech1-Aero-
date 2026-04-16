@@ -23,16 +23,17 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
     const activeFilterEntries = activeFilters ? Object.entries(activeFilters).filter(([key, value]) => {
         if (key === 'searchTerm') return false; 
         if (typeof value === 'object' && value !== null) {
-            return value.start || value.end;
+            return (value as any).start || (value as any).end;
         }
         return value && value !== 'all';
     }) : [];
 
     const getFilterDisplayValue = (key: string, value: any): string => {
         if (typeof value === 'object' && value !== null) {
-            if (value.start && value.end) return `${value.start} to ${value.end}`;
-            if (value.start) return `From ${value.start}`;
-            if (value.end) return `Until ${value.end}`;
+            const v = value as any;
+            if (v.start && v.end) return `${v.start} to ${v.end}`;
+            if (v.start) return `From ${v.start}`;
+            if (v.end) return `Until ${v.end}`;
         }
         return String(value);
     }

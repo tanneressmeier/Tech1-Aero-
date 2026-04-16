@@ -14,7 +14,7 @@ import { usePermissions } from './hooks/usePermissions.ts';
 import { useSettings } from './contexts/SettingsContext.tsx';
 
 // Types
-import { View, Technician, WorkOrder, RepairOrder, Aircraft, OptimizedVisit, PurchaseOrder, PurchaseOrderItem, Squawk, StagedWorkOrder, StagedTool, StagedConsumable, ParsedPOHeader, ParsedPackingSlipItem, InventoryItem, Tool, TimeLog } from './types.ts';
+import { View, Technician, WorkOrder, RepairOrder, Aircraft, OptimizedVisit, PurchaseOrder, PurchaseOrderItem, Squawk, StagedWorkOrder, StagedTool, StagedConsumable, ParsedPOHeader, ParsedPackingSlipItem, InventoryItem, Tool, TimeLog, Kit } from './types.ts';
 
 // Components
 import { LoginScreen } from './components/LoginScreen.tsx';
@@ -177,7 +177,7 @@ const App: React.FC = () => {
     const handleAnalyzeHistory = async (aircraft: Aircraft) => {
         setIsAnalyzing(true);
         try {
-            const forecast = await analyzeMaintenanceHistory(aircraft, state.workOrders, state.repairOrders);
+            const forecast = await analyzeMaintenanceHistory(aircraft);
             dispatch({ type: 'SET_FORECAST', payload: { aircraftId: aircraft.id, forecast } });
             showToast({ message: `Maintenance analysis complete for ${aircraft.tail_number}`, type: 'info' });
         } catch (e: any) {
@@ -262,6 +262,34 @@ const App: React.FC = () => {
         }
     };
 
+    // ── Phase 1: unified tooling slice handlers ───────────────────────────
+    const handleAddToolDirect = (tool: Tool) => {
+        dispatch({ type: 'ADD_TOOL', payload: tool });
+    };
+
+    const handleUpdateToolDirect = (tool: Tool) => {
+        dispatch({ type: 'UPDATE_TOOL', payload: tool });
+        api.updateTool(tool).catch(() => showToast({ message: 'Failed to persist tool update.', type: 'error' }));
+    };
+
+    const handleDeleteToolDirect = (id: string) => {
+        dispatch({ type: 'DELETE_TOOL', payload: id });
+        api.deleteTool(id).catch(() => showToast({ message: 'Failed to persist tool delete.', type: 'error' }));
+    };
+
+    const handleSetTools = (tools: Tool[]) => {
+        dispatch({ type: 'SET_TOOLS', payload: tools });
+    };
+
+    const handleSetKits = (kits: Kit[]) => {
+        dispatch({ type: 'SET_TOOL_KITS', payload: kits });
+    };
+
+    const handleSetNeededTools = (tools: Tool[]) => {
+        dispatch({ type: 'SET_NEEDED_TOOLS', payload: tools });
+    };
+    // ─────────────────────────────────────────────────────────────────────
+
     const handleUpdateConsumable = async (consumable: InventoryItem) => {
         try {
             const updatedItem = await api.updateConsumable(consumable);
@@ -319,7 +347,7 @@ const App: React.FC = () => {
     
     const handleConfirmReception = (
         po: PurchaseOrder,
-        categorizedItems: (PurchaseOrderItem & { category: 'part' | 'consumable' | 'tool' | 'unassigned' })[],
+        categorizedItems: (PurchaseOrderItem & { category?: 'part' | 'consumable' | 'tool' | 'unassigned' })[],
         squawkId?: string
     ) => {
         let updatedParts = [...state.partsInventory];
@@ -399,21 +427,21 @@ const App: React.FC = () => {
 
 
     const handleReceiveFromPackingSlip = (header: ParsedPOHeader, items: ParsedPackingSlipItem[]) => {
-        const targetPO = state.purchaseOrders.find(po => po.po_id === header.po_number);
+        const targetPO = state.purchaseOrders.find(po => po.po_id === header.poNumber);
         if (!targetPO) {
-            showToast({ message: `Purchase Order ${header.po_number} not found. Cannot receive items.`, type: 'error' });
+            showToast({ message: `Purchase Order ${header.poNumber} not found. Cannot receive items.`, type: 'error' });
             return;
         }
 
-        const categorizedItems = targetPO.items.map(poItem => {
-            const slipItem = items.find(slipItem => slipItem.model_number === poItem.name);
+        const updatedItems = targetPO.items.map(poItem => {
+            const slipItem = items.find(s => s.partNumber === poItem.inventoryItemId || s.description === poItem.name);
             return {
                 ...poItem,
-                category: slipItem?.category || 'unassigned'
+                quantityToOrder: slipItem?.quantityShipped ?? poItem.quantityToOrder,
             };
         });
 
-        handleConfirmReception(targetPO, categorizedItems);
+        handleConfirmReception(targetPO, updatedItems);
     };
 
     const handleSaveAssignments = (orderType: 'WO' | 'RO', orderId: string, technicianIds: string[]) => {
@@ -462,7 +490,7 @@ const App: React.FC = () => {
             case 'aircraft': return <AircraftDashboard aircraftList={state.aircraftList} schedules={state.schedules} forecasts={state.forecasts} onScheduleGenerated={handleScheduleGenerated} workOrders={state.workOrders} onCreateWorkOrder={handleCreateWorkOrderFromVisit} onUpdateAircraft={handleUpdateAircraft} onAnalyzeHistory={handleAnalyzeHistory} isAnalyzing={isAnalyzing} technicians={state.technicians} />;
             case 'work_orders': return <WorkOrderDashboard workOrders={state.workOrders} aircraftList={state.aircraftList} onSelectOrder={(id) => handleSelectOrder('wo', id)} onAddWorkOrder={handleAddWorkOrder} initialFilters={initialFilters} />;
             case 'repair_orders': return <RepairOrderDashboard repairOrders={state.repairOrders} aircraftList={state.aircraftList} onSelectOrder={(id) => handleSelectOrder('ro', id)} onAddRepairOrder={handleAddRepairOrder} initialFilters={initialFilters} />;
-            case 'tooling': return <ToolingDashboard tools={state.tools} onAddTool={handleAddTool} onUpdateTool={handleUpdateTool} onDeleteTool={handleDeleteTool} initialFilters={initialFilters} />;
+            case 'tooling': return <ToolingDashboard tools={state.tools} toolKits={state.toolKits} neededTools={state.neededTools} onAddTool={handleAddToolDirect} onUpdateTool={handleUpdateToolDirect} onDeleteTool={handleDeleteToolDirect} onSetTools={handleSetTools} onSetKits={handleSetKits} onSetNeededTools={handleSetNeededTools} />;
             case 'inventory': return <InventoryDashboard parts={[...state.partsInventory]} onCreatePurchaseOrder={(items) => { /* logic */ }} onUpdatePart={handleUpdatePart} />;
             case 'consumables': return <ConsumablesDashboard consumables={state.consumables} onUpdateConsumable={handleUpdateConsumable} onCreatePurchaseOrder={(items) => { /* logic */ }} />;
             case 'personnel': return <PersonnelDashboard technicians={state.technicians} workOrders={state.workOrders} repairOrders={state.repairOrders} generalTimeLogs={state.generalTimeLogs} activeTimeLogs={state.activeTimeLogs} currentUser={currentUser!} onAddTechnician={handleAddTechnician} onUpdateTechnician={handleUpdateTechnician} onClockIn={(techId) => { const newLog: TimeLog = {log_id: `tl-${Date.now()}`, technician_id: techId, start_time: new Date().toISOString(), is_billable: false }; dispatch({type: 'SET_ACTIVE_TIME_LOGS', payload: [...state.activeTimeLogs, newLog]}); }} onClockOut={(techId) => { const logToEnd = state.activeTimeLogs.find(l => l.technician_id === techId); if(logToEnd){ const endedLog = {...logToEnd, end_time: new Date().toISOString() }; dispatch({type: 'SET_GENERAL_TIME_LOGS', payload: [...state.generalTimeLogs, endedLog]}); dispatch({type: 'SET_ACTIVE_TIME_LOGS', payload: state.activeTimeLogs.filter(l => l.technician_id !== techId)}); } }}/>;

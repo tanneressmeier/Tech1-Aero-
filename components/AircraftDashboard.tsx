@@ -167,7 +167,7 @@ export const AircraftDashboard: React.FC<AircraftDashboardProps> = ({
       if (!selectedAircraft) return;
       setIsFetchingADs(true);
       try {
-          const ads = await fetchAircraftADs(selectedAircraft.make, selectedAircraft.model, selectedAircraft.serial_number);
+          const ads = await fetchAircraftADs(selectedAircraft);
           // Merge with existing ADs to avoid duplicates (naive check by AD number)
           const existingADs = selectedAircraft.ad_compliance || [];
           const existingAdNumbers = new Set(existingADs.map(ad => ad.ad_number));

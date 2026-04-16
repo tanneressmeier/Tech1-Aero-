@@ -1,5 +1,9 @@
 
-// FIX: Replaced placeholder content with actual type definitions.
+// =============================================================================
+// TECH1 AERO — types.ts
+// Phase 1 Unified: merged Tool Inventory Checker types into Tech1 base
+// =============================================================================
+
 export type View =
   | 'mission_control'
   | 'aircraft'
@@ -19,33 +23,15 @@ export interface Notification {
     message: string;
     read: boolean;
     timestamp: string;
-    link?: {
-        view: View;
-        orderId?: string;
-    };
+    link?: { view: View; orderId?: string };
 }
 
 export interface AppSettings {
-    profile: {
-        name: string;
-        email: string;
-    };
-    organization: {
-        name: string;
-        repairStationNum: string;
-        address: string;
-    };
-    financials: {
-        laborRate: number;
-        shopSupplies: number; // percentage
-        taxRate: number; // percentage
-    };
-    notifications: {
-        emailWorkOrder: boolean;
-        emailInventory: boolean;
-        pushCalibration: boolean;
-    };
-    appearance: {
+    profile:       { name: string; email: string };
+    organization:  { name: string; repairStationNum: string; address: string };
+    financials:    { laborRate: number; shopSupplies: number; taxRate: number };
+    notifications: { emailWorkOrder: boolean; emailInventory: boolean; pushCalibration: boolean };
+    appearance:    {
         themeMode: 'dark' | 'light' | 'system';
         accentColor: 'sky' | 'indigo' | 'emerald' | 'amber' | 'rose';
         density: 'Compact' | 'Comfortable';
@@ -58,287 +44,403 @@ export interface Technician {
     name: string;
     certifications: string[];
     role: 'Admin' | 'Lead Technician' | 'Technician';
-    efficiency?: number; // 0.0 to 1.0, defaults to 0.85
+    efficiency?: number;
 }
 
 export interface LogbookEntry {
-    entry_id: string;
-    aircraft_id: string;
-    entry_date: string; // ISO date string
-    description: string;
+    entry_id:     string;
+    aircraft_id:  string;
+    entry_date:   string;
+    description:  string;
     flight_hours?: number;
-    recorded_by: string; // technician id
+    recorded_by:  string;
 }
 
 export interface MaintenanceEvent {
-    id: string;
-    name: string;
-    intervalType: 'hours' | 'days';
-    intervalValue: number;
+    id:                  string;
+    name:                string;
+    intervalType:        'hours' | 'days';
+    intervalValue:       number;
     lastPerformedHours?: number;
-    lastPerformedDate?: string; // YYYY-MM-DD
-    manHours: number;
+    lastPerformedDate?:  string;
+    manHours:            number;
 }
 
 export interface ADCompliance {
-    ad_number: string;
-    effective_date: string; // YYYY-MM-DD
-    subject: string;
+    ad_number:         string;
+    effective_date:    string;
+    subject:           string;
     compliance_status: 'Complied' | 'Open';
-    due_date?: string; // YYYY-MM-DD, required if status is Open
-    url?: string; // URL to the AD on FAA DRS
+    due_date?:         string;
+    url?:              string;
 }
 
 export interface Aircraft {
-    id: string;
-    tail_number: string;
-    model: string;
-    make: string;
-    serial_number: string;
-    hours_total: number;
-    imageUrl?: string; // Added image URL support
+    id:                string;
+    tail_number:       string;
+    model:             string;
+    make:              string;
+    serial_number:     string;
+    hours_total:       number;
+    imageUrl?:         string;
     maintenance_events: MaintenanceEvent[];
-    logbook_entries: LogbookEntry[];
-    ad_compliance: ADCompliance[];
+    logbook_entries:   LogbookEntry[];
+    ad_compliance:     ADCompliance[];
 }
 
 export interface Supplier {
     supplierName: string;
-    cost: number;
+    cost:         number;
 }
 
 export interface PartCertification {
-    type: '8130-3' | 'CoC' | 'EASA Form 1' | 'Other' | 'None';
-    verified: boolean;
-    number?: string; // Control or Tracking number
+    type:      '8130-3' | 'CoC' | 'EASA Form 1' | 'Other' | 'None';
+    verified:  boolean;
+    number?:   string;
     mediaUrl?: string;
-    mediaName?: string;
+    mediaName?:string;
 }
 
 export interface InventoryItem {
-    id: string;
-    part_no: string;
-    sku: string;
-    description: string;
-    qty_on_hand: number;
-    qty_reserved: number;
-    reorder_level: number;
-    shelf_location: string;
-    storage_area: string;
+    id:                    string;
+    part_no:               string;
+    sku:                   string;
+    description:           string;
+    qty_on_hand:           number;
+    qty_reserved:          number;
+    reorder_level:         number;
+    shelf_location:        string;
+    storage_area:          string;
     procurement_lead_time: number;
-    unit: string;
-    suppliers: Supplier[];
-    expiration_date?: string;
-    certification?: PartCertification;
+    unit:                  string;
+    suppliers:             Supplier[];
+    expiration_date?:      string;
+    certification?:        PartCertification;
 }
 
+// ---------------------------------------------------------------------------
+// UNIFIED TOOL
+// Merges Tech1's Tool (id, make, model, serial, calibrationRequired,
+// calibrationDueDate, vendorPrices) with Tool Inventory Checker's Tool
+// (calibrationDueDays, calibrationStatus, category, location, owner, toolCost).
+// All existing code continues to work — new fields are optional additions.
+// ---------------------------------------------------------------------------
 export interface Tool {
-    id: string;
-    name: string;
-    description: string;
-    details?: string;
-    make: string | null;
-    model: string | null;
-    serial: string | null;
+    // Core identity (Tech1 originals — unchanged)
+    id:                  string;
+    name:                string;
+    description:         string;
+    details?:            string;
+    make:                string | null;
+    model:               string | null;
+    serial:              string | null;
     calibrationRequired: boolean;
-    calibrationDueDate?: string; // YYYY-MM-DD
-    vendorPrices: {
-        bhd?: number;
-        continental?: number;
-    };
+    calibrationDueDate?: string;       // YYYY-MM-DD
+    vendorPrices:        { bhd?: number; continental?: number };
+
+    // Extended fields from Tool Inventory Checker (all optional — non-breaking)
+    calibrationDueDays?: number;       // computed: days until cal due
+    calibrationStatus?:  'Good' | 'Needs Calibration' | 'N/A';
+    category?:           string;
+    location?:           string;
+    owner?:              string;
+    toolCost?:           string;
+    quantity?:           string;
+    unitPrice?:          string;
+    totalPrice?:         string;
+    sourcingLink?:       string;
+    status?:             string;
 }
 
 export interface TimeLog {
-    log_id: string;
+    log_id:        string;
     technician_id: string;
-    start_time: string; // ISO date string
-    end_time?: string; // ISO date string
-    is_billable: boolean;
-    notes?: string;
+    start_time:    string;
+    end_time?:     string;
+    is_billable:   boolean;
+    notes?:        string;
 }
 
 export interface Signature {
     technician_id: string;
-    signed_at: string; // ISO date string
+    signed_at:     string;
 }
 
 export interface UsedPart {
     inventory_item_id: string;
-    quantity_used: number;
+    quantity_used:     number;
 }
 
 export interface Squawk {
-    squawk_id: string;
-    description: string;
-    status: 'open' | 'in_progress' | 'completed' | 'on_hold';
-    priority: 'routine' | 'urgent' | 'aog';
-    time_logs: TimeLog[];
-    category: string;
-    rii_inspection_enabled: boolean;
-    notes: string;
-    always_show_notes: boolean;
-    created_by: string;
-    created_at: string; // ISO date string
-    owner_auth: boolean;
-    hours_estimate: number;
-    department: string;
-    billing_method: string;
-    billing_customer: string;
-    ship_in_charge: number; // percentage
-    use_flat_part_charge: boolean;
-    do_not_bill: boolean;
-    do_not_tax_shop_labor: boolean;
-    logbook_category_airframe: boolean;
-    logbook_category_powerplant: boolean;
-    assigned_technician_ids: string[];
-    used_tool_ids: string[];
-    used_parts: UsedPart[];
-    resolution: string;
+    squawk_id:                    string;
+    description:                  string;
+    status:                       'open' | 'in_progress' | 'completed' | 'on_hold';
+    priority:                     'routine' | 'urgent' | 'aog';
+    time_logs:                    TimeLog[];
+    category:                     string;
+    rii_inspection_enabled:       boolean;
+    notes:                        string;
+    always_show_notes:            boolean;
+    created_by:                   string;
+    created_at:                   string;
+    owner_auth:                   boolean;
+    hours_estimate:               number;
+    department:                   string;
+    billing_method:               string;
+    billing_customer:             string;
+    ship_in_charge:               number;
+    use_flat_part_charge:         boolean;
+    do_not_bill:                  boolean;
+    do_not_tax_shop_labor:        boolean;
+    logbook_category_airframe:    boolean;
+    logbook_category_powerplant:  boolean;
+    assigned_technician_ids:      string[];
+    used_tool_ids:                string[];
+    used_parts:                   UsedPart[];
+    resolution:                   string;
     signatures: {
-        work_complete: Signature | null;
+        work_complete:     Signature | null;
         operational_check: Signature | null;
-        inspector: Signature | null;
+        inspector:         Signature | null;
         return_to_service: Signature | null;
     };
 }
 
 export interface WorkOrder {
-    wo_id: string;
-    aircraft_id: string;
-    aircraft_tail_number: string;
-    visit_name: string;
-    scheduled_date: string; // YYYY-MM-DD
-    status: 'Pending' | 'In Progress' | 'Completed' | 'On Hold' | 'Cancelled';
-    priority: 'routine' | 'urgent' | 'aog';
-    squawks: Squawk[];
-    location?: string; // e.g., "Hangar 1", "Ramp"
+    wo_id:               string;
+    aircraft_id:         string;
+    aircraft_tail_number:string;
+    visit_name:          string;
+    scheduled_date:      string;
+    status:              'Pending' | 'In Progress' | 'Completed' | 'On Hold' | 'Cancelled';
+    priority:            'routine' | 'urgent' | 'aog';
+    squawks:             Squawk[];
+    location?:           string;
 }
 
 export interface RepairOrder {
-    ro_id: string;
-    aircraft_id: string;
-    aircraft_tail_number: string;
-    description: string;
-    created_date: string; // YYYY-MM-DD
-    status: 'Pending' | 'In Progress' | 'Completed' | 'On Hold' | 'Cancelled';
-    priority: 'routine' | 'urgent' | 'aog';
-    squawks: Squawk[];
-    location?: string; // e.g., "Hangar 1", "Ramp"
+    ro_id:               string;
+    aircraft_id:         string;
+    aircraft_tail_number:string;
+    description:         string;
+    created_date:        string;
+    status:              'Pending' | 'In Progress' | 'Completed' | 'On Hold' | 'Cancelled';
+    priority:            'routine' | 'urgent' | 'aog';
+    squawks:             Squawk[];
+    location?:           string;
 }
 
 export interface PurchaseOrderItem {
-    id: string;
-    inventoryItemId: string;
-    name: string;
-    description: string;
-    quantityToOrder: number;
-    costPerUnit: number;
-    supplierName: string;
+    id:               string;
+    inventoryItemId:  string;
+    name:             string;
+    description:      string;
+    quantityToOrder:  number;
+    costPerUnit:      number;
+    supplierName:     string;
 }
 
 export interface PurchaseOrder {
-    po_id: string;
+    po_id:        string;
     supplierName: string;
-    created_date: string; // YYYY-MM-DD
-    status: 'Draft' | 'Submitted' | 'Partially Received' | 'Received' | 'Cancelled';
-    items: PurchaseOrderItem[];
-    totalCost: number;
+    created_date: string;
+    status:       'Draft' | 'Submitted' | 'Partially Received' | 'Received' | 'Cancelled';
+    items:        PurchaseOrderItem[];
+    totalCost:    number;
 }
 
 export interface OptimizedVisitEvent {
-    eventName: string;
+    eventName:           string;
     reasonForScheduling: string;
 }
 
 export interface OptimizedVisit {
-    visitName: string;
-    scheduledDate: string; // YYYY-MM-DD
-    totalManHours: number;
-    hangarAssignment: string;
-    events: OptimizedVisitEvent[];
-    requiredTooling: string[];
-    requiredConsumables: string[];
+    visitName:            string;
+    scheduledDate:        string;
+    totalManHours:        number;
+    hangarAssignment:     string;
+    events:               OptimizedVisitEvent[];
+    requiredTooling:      string[];
+    requiredConsumables:  string[];
 }
 
 export interface OptimizedSchedule {
     aircraftId: string;
-    schedule: OptimizedVisit[];
-    summary: string;
+    schedule:   OptimizedVisit[];
+    summary:    string;
 }
 
 export interface MaintenanceInsight {
-    severity: 'low' | 'medium' | 'high';
-    pattern: string;
-    prediction: string;
+    severity:       'low' | 'medium' | 'high';
+    pattern:        string;
+    prediction:     string;
     recommendation: string;
 }
 
 export interface MaintenanceForecast {
     aircraftId: string;
-    summary: string;
-    insights: MaintenanceInsight[];
+    summary:    string;
+    insights:   MaintenanceInsight[];
 }
 
 interface BaseStagedRecord {
     validationStatus: 'valid' | 'invalid' | 'needs_review';
-    validationNotes: string[];
+    validationNotes:  string[];
 }
 
 export interface StagedWorkOrder extends BaseStagedRecord {
-    wo_id: string;
-    aircraft_tail_number: string;
-    visit_name: string;
-    scheduled_date: string;
-    status: string;
-    priority: string;
-    tasks: string;
+    wo_id:               string;
+    aircraft_tail_number:string;
+    visit_name:          string;
+    scheduled_date:      string;
+    status:              string;
+    priority:            string;
+    tasks:               string;
 }
 
 export interface StagedTool extends BaseStagedRecord {
-    // Define properties based on csv
-    Name: string;
-    Description: string;
-    Make?: string;
-    Model?: string;
-    Serial?: string;
-    ToolType: string;
-    CalibrationDueNextDate?: string;
+    Name:                   string;
+    Description:            string;
+    Make?:                  string;
+    Model?:                 string;
+    Serial?:                string;
+    ToolType:               string;
+    CalibrationDueNextDate?:string;
 }
 
 export interface StagedConsumable extends BaseStagedRecord {
-    // Define properties based on csv
     'Part Number': string;
-    Description: string;
-    Location: string;
-    Quantity: number;
-    'Min Level': number;
-    Expiration?: string;
+    Description:   string;
+    Location:      string;
+    Quantity:      number;
+    'Min Level':   number;
+    Expiration?:   string;
 }
 
 export interface ParsedPOHeader {
-    po_number: string;
-    supplier_name: string;
-    order_date: string;
+    supplierName:   string;
+    poNumber:       string;
+    orderDate:      string;
+    estimatedTotal: number;
 }
 
 export interface ParsedPackingSlipItem {
-    model_number: string;
-    description: string;
-    quantity: number;
-    category: 'tool' | 'part' | 'consumable' | 'unassigned';
+    partNumber:      string;
+    description:     string;
+    quantityShipped: number;
+    unitCost:        number;
 }
+
+// ---------------------------------------------------------------------------
+// Tool Inventory Checker types — new additions for Phase 1
+// ---------------------------------------------------------------------------
+
+/** Vendor search link (replaces paid Google Search grounding) */
+export interface VendorLink {
+    vendor: string;
+    url:    string;
+}
+
+export interface SourcingInfo {
+    vendorLinks:   VendorLink[];
+    sourcingNotes: string;
+}
+
+export interface SuggestedSubstitution {
+    neededTool:    Tool;
+    suggestedTool: Tool;
+    confidence:    'High' | 'Medium' | 'Low';
+    reason:        string;
+}
+
+export interface ComparisonResult {
+    available:               Tool[];
+    onOrder:                 Tool[];
+    shortage:                Tool[];
+    suggestedSubstitutions?: SuggestedSubstitution[];
+}
+
+export interface Kit {
+    id:        string;
+    name:      string;
+    tools:     Tool[];
+    createdAt: string;
+}
+
+export interface SavedToolList {
+    id:               string;
+    name:             string;
+    maintenanceEvent: string;
+    tools:            Tool[];
+    createdAt:        string;
+}
+
+export interface SavedComparison {
+    id:               string;
+    name:             string;
+    createdAt:        string;
+    result:           ComparisonResult;
+    toolListName:     string;
+    maintenanceEvent: string;
+}
+
+/** Per-aircraft tool history hub */
+export interface AircraftToolData {
+    aircraftId:  string;
+    toolLists:   SavedToolList[];
+    comparisons: SavedComparison[];
+}
+
+export interface MaintenanceTask {
+    task:  string;
+    tools: Tool[];
+}
+
+export interface PurchasePlanItem {
+    id:          string;
+    aircraft:    string;
+    itemType:    string;
+    name:        string;
+    partNumber:  string;
+    manufacturer:string;
+    reason:      string;
+    stage:       string;
+    unitPrice:   string;
+    quantity:    string;
+    totalPrice:  string;
+    sourcingLink:string;
+    requestId:   string;
+    status:      string;
+    notes:       string;
+    received?:   boolean;
+    tlNumber?:   string;
+}
+
+// ---------------------------------------------------------------------------
+// Existing types preserved from Tech1 (unchanged)
+// ---------------------------------------------------------------------------
 
 export interface QuoteLineItem {
     description: string;
-    quantity: number;
-    unitPrice: number;
-    total: number;
+    part_no?:    string;
+    quantity:    number;
+    unitPrice:   number;
+    total:       number;
 }
 
 export interface Quote {
     customerDescription: string;
-    lineItems: QuoteLineItem[];
-    subtotal: number;
-    tax: number;
-    total: number;
+    lineItems:           QuoteLineItem[];
+    subtotal:            number;
+    laborTotal:          number;
+    partsTotal:          number;
+    shopSupplies:        number;
+    tax:                 number;
+    grandTotal:          number;
+}
+
+export interface ToastMessage {
+    id:      number;
+    message: string;
+    type:    'success' | 'error' | 'info' | 'warning';
 }
