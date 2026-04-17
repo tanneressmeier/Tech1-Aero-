@@ -5,10 +5,11 @@ import {
   PlusIcon, TrashIcon, PencilIcon, MagnifyingGlassIcon,
   ArrowUpTrayIcon, ArrowDownTrayIcon, SparklesIcon,
   WrenchIcon, ChevronRightIcon, CheckBadgeIcon, ExclamationTriangleIcon,
-  FolderOpenIcon, XMarkIcon, InformationCircleIcon,
+  FolderOpenIcon, XMarkIcon, InformationCircleIcon, DocumentIcon,
 } from './icons.tsx';
 import { detectCsvColumnMapping, applyCsvMapping, predictToolsFromJob, compareToolsClientSide, findSubstitutions } from '../services/geminiService.ts';
 import { getVendorSourcingInfo } from '../services/vendorDirectory.ts';
+import { ToolingReportModal } from './ToolingReportModal.tsx';
 
 interface ToolingDashboardProps {
   tools:      Tool[];
@@ -167,6 +168,7 @@ export const ToolingDashboard: React.FC<ToolingDashboardProps> = ({
 
   // ── CSV import state
   const [isImporting, setIsImporting] = useState(false);
+  const [isReportOpen, setIsReportOpen] = useState(false);
 
   // ── Kit state
   const [newKitName, setNewKitName] = useState('');
@@ -340,6 +342,9 @@ export const ToolingDashboard: React.FC<ToolingDashboardProps> = ({
               </label>
               <button onClick={handleExport} className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-lg bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10">
                 <ArrowDownTrayIcon className="w-4 h-4" /> Export
+              </button>
+              <button onClick={() => setIsReportOpen(true)} className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-lg bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10">
+                <DocumentIcon className="w-4 h-4" /> Report
               </button>
               <button onClick={() => setEditTool({})} className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-lg bg-sky-600 hover:bg-sky-500 text-white font-medium">
                 <PlusIcon className="w-4 h-4" /> Add Tool
@@ -583,6 +588,8 @@ export const ToolingDashboard: React.FC<ToolingDashboardProps> = ({
           onClose={() => setEditTool(false)}
         />
       )}
+
+      <ToolingReportModal isOpen={isReportOpen} onClose={() => setIsReportOpen(false)} tools={tools} />
     </div>
   );
 };
