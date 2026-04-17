@@ -458,27 +458,20 @@ const App: React.FC = () => {
 
     const handleGlobalSearch = async (query: string) => {
         setIsSearching(true);
-        setInitialFilters(null); // Clear previous filters
+        setInitialFilters(null);
         try {
-            const intent = await getSearchIntent(query);
+            const intent = getSearchIntent(query);
             if (intent.view !== 'unknown') {
                 setInitialFilters(intent.filters);
                 setCurrentView(intent.view);
-                // Capitalize first letter for display
                 const viewName = intent.view.charAt(0).toUpperCase() + intent.view.slice(1).replace('_', ' ');
-                showToast({
-                    message: `Navigating to ${viewName}...`,
-                    type: 'info'
-                });
+                showToast({ message: `Navigating to ${viewName}…`, type: 'info' });
             } else {
-                showToast({
-                    message: "Sorry, I couldn't understand that search. Please try rephrasing.",
-                    type: 'error'
-                });
+                showToast({ message: "Couldn't understand that search. Try rephrasing.", type: 'error' });
             }
         } catch (error) {
-            console.error("Failed to execute AI search:", error);
-            showToast({ message: 'AI search failed. Please try again.', type: 'error' });
+            console.error('Search failed:', error);
+            showToast({ message: 'Search failed. Please try again.', type: 'error' });
         } finally {
             setIsSearching(false);
         }

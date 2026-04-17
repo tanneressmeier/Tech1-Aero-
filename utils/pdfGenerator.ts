@@ -1,6 +1,6 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { Tool } from '../types.ts';
+import { Tool, Quote, WorkOrder, RepairOrder, Aircraft } from '../types.ts';
 
 // Simple SVG logo for the report header
 const AERO_LOGO_SVG = `
@@ -90,4 +90,115 @@ export const generateToolingReportPDF = async (tools: Tool[], title: string) => 
     });
 
     doc.save(`${title.toLowerCase().replace(/ /g, '_')}_report.pdf`);
+};
+export const generateQuotePDF = async (
+    quote: Quote,
+    order: WorkOrder | RepairOrder,
+    aircraft: Aircraft,
+    orgName: string = 'Tech1 Aero Systems',
+    repairStationNum: string = ''
+) => {
+    const doc = new jsPDF();
+    const orderId = 'wo_id' in order ? order.wo_id : order.ro_id;
+    const orderType = 'wo_id' in order ? 'Work Order' : 'Repair Order';
+    const pageW = doc.internal.pageSize.getWidth();
+    const margin = 15;
+
+    const logoDataUrl = await svgToPngDataUrl(AERO_LOGO_SVG);
+
+    // ── Header ────────────────────────────────────────────────────────────
+    doc.addImage(logoDataUrl, 'PNG', margin, 12, 30, 8);
+
+    doc.setFontSize(22);
+    doc.setTextColor('#1e293b');
+    doc.text('QUOTE', pageW - margin, 18, { align: 'right' });
+
+    doc.setFontSize(9);
+    doc.setTextColor('#64748b');
+    doc.text(orgName, margin, 26);
+    if (repairStationNum) doc.text(`Repair Station: ${repairStationNum}`, margin, 31);
+    doc.text(`Date: ${new Date().toLocaleDateString()}`, pageW - margin, 26, { align: 'right' });
+    doc.text(`${orderType}: ${orderId}`, pageW - margin, 31, { align: 'right' });
+    doc.text(`Aircraft: ${aircraft.tail_number} — ${aircraft.make} ${aircraft.model}`, pageW - margin, 36, { align: 'right' });
+
+    // ── Customer description ──────────────────────────────────────────────
+    doc.setDrawColor('#e2e8f0');
+    doc.setLineWidth(0.3);
+    doc.line(margin, 42, pageW - margin, 42);
+
+    doc.setFontSize(10);
+    doc.setTextColor('#1e293b');
+    doc.text('Description of Work Performed', margin, 49);
+
+    doc.setFontSize(9);
+    doc.setTextColor('#334155');
+    const descLines = doc.splitTextToSize(quote.customerDescription, pageW - margin * 2);
+    doc.text(descLines, margin, 56);
+    const descHeight = descLines.length * 5;
+
+    // ── Line items table ──────────────────────────────────────────────────
+    const tableStartY = 58 + descHeight;
+
+    autoTable(doc, {
+        head: [['Description', 'Part #', 'Qty', 'Unit Price', 'Total']],
+        body: quote.lineItems.map(item => [
+            item.description,
+            item.part_no || '—',
+            item.quantity.toString(),
+            `$${item.unitPrice.toFixed(2)}`,
+            `$${item.total.toFixed(2)}`,
+        ]),
+        startY: tableStartY,
+        theme: 'grid',
+        headStyles: { fillColor: '#1e293b', textColor: '#ffffff', fontSize: 9 },
+        bodyStyles: { fontSize: 9, textColor: '#334155' },
+        columnStyles: {
+            0: { cellWidth: 'auto' },
+            1: { cellWidth: 28 },
+            2: { cellWidth: 14, halign: 'center' },
+            3: { cellWidth: 26, halign: 'right' },
+            4: { cellWidth: 26, halign: 'right' },
+        },
+        margin: { left: margin, right: margin },
+    });
+
+    // ── Totals block ──────────────────────────────────────────────────────
+    const finalY = (doc as any).lastAutoTable.finalY + 6;
+    const totalsX = pageW - margin - 70;
+
+    const totalsRows: [string, string][] = [
+        ['Labor',        `$${quote.laborTotal.toFixed(2)}`],
+        ['Parts',        `$${quote.partsTotal.toFixed(2)}`],
+        ['Shop Supplies',`$${quote.shopSupplies.toFixed(2)}`],
+        ['Subtotal',     `$${quote.subtotal.toFixed(2)}`],
+        ['Tax',          `$${quote.tax.toFixed(2)}`],
+    ];
+
+    doc.setFontSize(9);
+    let rowY = finalY;
+    for (const [label, value] of totalsRows) {
+        doc.setTextColor('#64748b');
+        doc.text(label, totalsX, rowY);
+        doc.setTextColor('#334155');
+        doc.text(value, pageW - margin, rowY, { align: 'right' });
+        rowY += 6;
+    }
+
+    doc.setDrawColor('#1e293b');
+    doc.setLineWidth(0.5);
+    doc.line(totalsX, rowY - 1, pageW - margin, rowY - 1);
+
+    doc.setFontSize(11);
+    doc.setTextColor('#1e293b');
+    doc.text('Total Due', totalsX, rowY + 5);
+    doc.setFont('helvetica', 'bold');
+    doc.text(`$${quote.grandTotal.toFixed(2)}`, pageW - margin, rowY + 5, { align: 'right' });
+    doc.setFont('helvetica', 'normal');
+
+    // ── Footer ────────────────────────────────────────────────────────────
+    doc.setFontSize(8);
+    doc.setTextColor('#94a3b8');
+    doc.text('Thank you for your business.', pageW / 2, doc.internal.pageSize.getHeight() - 10, { align: 'center' });
+
+    doc.save(`quote-${orderId}-${new Date().toISOString().split('T')[0]}.pdf`);
 };
