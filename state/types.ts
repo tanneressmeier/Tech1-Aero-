@@ -44,6 +44,8 @@ export type AppAction =
     | { type: 'SET_PURCHASE_ORDERS';    payload: PurchaseOrder[] }
     | { type: 'SET_GENERAL_TIME_LOGS';  payload: TimeLog[] }
     | { type: 'SET_ACTIVE_TIME_LOGS';   payload: TimeLog[] }
+    | { type: 'ADD_ACTIVE_TIME_LOG';    payload: TimeLog }
+    | { type: 'CLOCK_OUT_TASK';         payload: { logId: string; endTime: string } }
     | { type: 'ADD_NOTIFICATION';       payload: Notification }
     | { type: 'MARK_NOTIFICATIONS_AS_READ' }
     // New tooling actions (Phase 1 additions)

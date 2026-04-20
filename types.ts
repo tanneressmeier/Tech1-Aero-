@@ -171,8 +171,12 @@ export interface TimeLog {
     technician_id: string;
     start_time:    string;
     end_time?:     string;
-    is_billable:   boolean;
+    is_billable:   boolean;   // true = charged to customer (task-level); false = shop presence only
     notes?:        string;
+    // Task linkage — when set, this log is billable to a specific squawk
+    squawk_id?:    string;
+    order_id?:     string;    // wo_id or ro_id
+    order_type?:   'WO' | 'RO';
 }
 
 export interface Signature {

@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { RepairOrder, Aircraft, Technician, InventoryItem, Tool } from '../types.ts';
+import { RepairOrder, Aircraft, Technician, InventoryItem, Tool, TimeLog } from '../types.ts';
 import { SquawkDetailView } from './SquawkDetailView.tsx';
 import { Permissions } from '../hooks/usePermissions.ts';
 import { QuoteModal } from './QuoteModal.tsx';
@@ -18,6 +18,9 @@ interface RepairOrderDetailProps {
     onBack: () => void;
     onUpdateOrder: (updatedOrder: RepairOrder) => void;
     permissions: Permissions;
+    activeTimeLogs?: TimeLog[];
+    onClockInToTask?: (log: Omit<TimeLog, 'log_id'>) => void;
+    onClockOutOfTask?: (logId: string, endTime: string) => void;
 }
 
 // ── QuoteBaselineEditor ───────────────────────────────────────────────────────
@@ -90,6 +93,7 @@ const QuoteBaselineEditor: React.FC<{
 // ── Main component ────────────────────────────────────────────────────────────
 export const RepairOrderDetail: React.FC<RepairOrderDetailProps> = ({
     order, aircraft, technicians, inventory, tools, onBack, onUpdateOrder, permissions,
+    activeTimeLogs = [], onClockInToTask, onClockOutOfTask,
 }) => {
     const [isQuoteModalOpen, setIsQuoteModalOpen] = useState(false);
     const [showToolPlan, setShowToolPlan] = useState(false);
@@ -235,6 +239,9 @@ export const RepairOrderDetail: React.FC<RepairOrderDetailProps> = ({
                             technicians={technicians} inventory={inventory}
                             tools={tools} onUpdateOrder={onUpdateOrder}
                             permissions={permissions}
+                            activeTimeLogs={activeTimeLogs}
+                            onClockInToTask={onClockInToTask}
+                            onClockOutOfTask={onClockOutOfTask}
                         />
                     ))}
                 </div>

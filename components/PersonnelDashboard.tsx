@@ -116,7 +116,28 @@ export const PersonnelDashboard: React.FC<PersonnelDashboardProps> = ({
                                         <td className="whitespace-nowrap py-4 pl-6 pr-3 text-sm font-medium text-white">{tech.name}</td>
                                         <td className="whitespace-nowrap px-3 py-4 text-sm text-slate-400">{tech.role}</td>
                                         <td className="whitespace-nowrap px-3 py-4 text-sm text-slate-400 font-mono text-xs">{tech.certifications.join(', ')}</td>
-                                        <td className="whitespace-nowrap px-3 py-4 text-sm font-mono text-sky-400">{Math.round((tech.efficiency || 0.85) * 100)}%</td>
+                                        <td className="whitespace-nowrap px-3 py-4 text-sm font-mono">
+                                            {(() => {
+                                                const hrs = techHoursData.find(h => h.technicianId === tech.id);
+                                                const total    = hrs?.totalHours    ?? 0;
+                                                const billable = hrs?.billableHours ?? 0;
+                                                const ratio    = total > 0 ? billable / total : null;
+                                                const colour   = ratio === null ? 'text-slate-500'
+                                                    : ratio >= 0.75 ? 'text-emerald-400'
+                                                    : ratio >= 0.5  ? 'text-amber-400'
+                                                    : 'text-red-400';
+                                                return (
+                                                    <div>
+                                                        <span className={colour}>
+                                                            {ratio !== null ? `${Math.round(ratio * 100)}%` : '—'}
+                                                        </span>
+                                                        <p className="text-[10px] text-slate-600 font-normal">
+                                                            {billable.toFixed(1)}h bill / {total.toFixed(1)}h total
+                                                        </p>
+                                                    </div>
+                                                );
+                                            })()}
+                                        </td>
                                         <td className="whitespace-nowrap px-3 py-4 text-sm">
                                             {isClockedIn ? (
                                                 <span className="inline-flex items-center rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-xs font-medium text-emerald-400 border border-emerald-500/20">

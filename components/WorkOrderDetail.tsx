@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { WorkOrder, RepairOrder, Aircraft, Technician, InventoryItem, Tool, Squawk, Signature } from '../types.ts';
+import { WorkOrder, RepairOrder, Aircraft, Technician, InventoryItem, Tool, Squawk, Signature, TimeLog } from '../types.ts';
 import { SquawkDetailView } from './SquawkDetailView.tsx';
 import { SquawkKanbanBoard } from './SquawkKanbanBoard.tsx';
 import { SquawkGantt } from './SquawkGantt.tsx';
@@ -24,13 +24,15 @@ interface WorkOrderDetailProps {
     onUpdateOrder: (updatedOrder: WorkOrder) => void;
     permissions: Permissions;
     initialViewMode?: 'list' | 'board' | 'gantt';
+    activeTimeLogs?: TimeLog[];
+    onClockInToTask?: (log: Omit<TimeLog, 'log_id'>) => void;
+    onClockOutOfTask?: (logId: string, endTime: string) => void;
 }
-
 const CURRENT_USER_ID = 'tech-1';
 
 export const WorkOrderDetail: React.FC<WorkOrderDetailProps> = ({
     order, aircraft, technicians, inventory, tools, onBack, onUpdateOrder, permissions,
-    initialViewMode = 'list',
+    initialViewMode = 'list', activeTimeLogs = [], onClockInToTask, onClockOutOfTask,
 }) => {
     const [isQuoteModalOpen, setIsQuoteModalOpen] = useState(false);
     const [viewMode, setViewMode] = useState<'list' | 'board' | 'gantt'>(initialViewMode);
@@ -230,6 +232,9 @@ export const WorkOrderDetail: React.FC<WorkOrderDetailProps> = ({
                                 squawk={squawk} order={order} aircraft={aircraft}
                                 technicians={technicians} inventory={inventory} tools={tools}
                                 onUpdateOrder={onUpdateOrder} permissions={permissions}
+                                activeTimeLogs={activeTimeLogs}
+                                onClockInToTask={onClockInToTask}
+                                onClockOutOfTask={onClockOutOfTask}
                             />
                         ))}
                     </div>

@@ -52,6 +52,19 @@ export const appReducer = (state: AppState, action: AppAction): AppState => {
             return { ...state, generalTimeLogs: action.payload };
         case 'SET_ACTIVE_TIME_LOGS':
             return { ...state, activeTimeLogs: action.payload };
+        case 'ADD_ACTIVE_TIME_LOG':
+            return { ...state, activeTimeLogs: [...state.activeTimeLogs, action.payload] };
+        case 'CLOCK_OUT_TASK': {
+            const { logId, endTime } = action.payload;
+            const log = state.activeTimeLogs.find(l => l.log_id === logId);
+            if (!log) return state;
+            const closedLog = { ...log, end_time: endTime };
+            return {
+                ...state,
+                activeTimeLogs:  state.activeTimeLogs.filter(l => l.log_id !== logId),
+                generalTimeLogs: [...state.generalTimeLogs, closedLog],
+            };
+        }
         case 'ADD_NOTIFICATION': {
             const updated = [action.payload, ...state.notifications].slice(0, 50);
             return { ...state, notifications: updated };

@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Squawk, WorkOrder, RepairOrder, Aircraft, Technician, InventoryItem, Tool, Signature, SquawkStage } from '../types.ts';
+import React, { useState, useEffect } from 'react';
+import { Squawk, WorkOrder, RepairOrder, Aircraft, Technician, InventoryItem, Tool, Signature, SquawkStage, TimeLog } from '../types.ts';
 import {
     ClockIcon, CogIcon, UserGroupIcon, WrenchIcon, BeakerIcon, PencilIcon, PlusIcon,
     CheckBadgeIcon, LockClosedIcon, SparklesIcon, TrashIcon, ExclamationTriangleIcon,
@@ -8,6 +8,7 @@ import {
 import TimeLogModal from './TimeLogModal.tsx';
 import AssignPartModal from './AssignPartModal.tsx';
 import AssignToolModal from './AssignToolModal.tsx';
+import { AssignTechnicianModal } from './AssignTechnicianModal.tsx';
 import { SquawkAdminModal } from './SquawkAdminModal.tsx';
 import { SignatureConfirmationModal } from './SignatureConfirmationModal.tsx';
 import { TroubleshootingGuideModal } from './TroubleshootingGuideModal.tsx';
@@ -16,14 +17,18 @@ import { predictToolsFromJob } from '../services/geminiService.ts';
 import { useToast } from '../contexts/ToastContext.tsx';
 
 interface SquawkDetailViewProps {
-    squawk: Squawk;
-    order: WorkOrder | RepairOrder;
-    aircraft: Aircraft;
-    technicians: Technician[];
-    inventory: InventoryItem[];
-    tools: Tool[];
-    onUpdateOrder: (updatedOrder: WorkOrder | RepairOrder) => void;
-    permissions: Permissions;
+    squawk:     Squawk;
+    order:      WorkOrder | RepairOrder;
+    aircraft:   Aircraft;
+    technicians:Technician[];
+    inventory:  InventoryItem[];
+    tools:      Tool[];
+    onUpdateOrder:       (updatedOrder: WorkOrder | RepairOrder) => void;
+    permissions:         Permissions;
+    // Time tracking — shop-level active logs passed from App state
+    activeTimeLogs?:     TimeLog[];
+    onClockInToTask?:    (log: Omit<TimeLog, 'log_id'>) => void;
+    onClockOutOfTask?:   (logId: string, endTime: string) => void;
 }
 
 const CURRENT_USER_ID = 'tech-1';
@@ -41,18 +46,24 @@ const CalPill: React.FC<{ tool: Tool }> = ({ tool }) => {
 };
 
 export const SquawkDetailView: React.FC<SquawkDetailViewProps> = ({
-    squawk, order, aircraft, technicians, inventory, tools, onUpdateOrder, permissions
+    squawk, order, aircraft, technicians, inventory, tools, onUpdateOrder, permissions,
+    activeTimeLogs = [], onClockInToTask, onClockOutOfTask,
 }) => {
     const { showToast } = useToast();
     const [isTimeLogPanelOpen,    setIsTimeLogPanelOpen]    = useState(false);
     const [isAssignPartPanelOpen, setIsAssignPartPanelOpen] = useState(false);
     const [isAssignToolPanelOpen, setIsAssignToolPanelOpen] = useState(false);
+    const [isAssignTechPanelOpen, setIsAssignTechPanelOpen] = useState(false);
     const [isSquawkAdminModalOpen,setIsSquawkAdminModalOpen]= useState(false);
     const [isSignatureModalOpen,  setIsSignatureModalOpen]  = useState<keyof Squawk['signatures'] | null>(null);
     const [isTroubleshootingModalOpen, setIsTroubleshootingModalOpen] = useState(false);
     const [troubleshootingGuide,  setTroubleshootingGuide]  = useState('');
     const [isTroubleshootingLoading, setIsTroubleshootingLoading] = useState(false);
     const [isSuggestingTools,     setIsSuggestingTools]     = useState(false);
+    // Local draft for completion slider — only commits to state on pointer-up (prevents toast spam)
+    const [draftPct, setDraftPct] = useState<number>(squawk.completion_percentage ?? 0);
+    // Sync draft when squawk identity changes (switching between squawks)
+    useEffect(() => { setDraftPct(squawk.completion_percentage ?? 0); }, [squawk.squawk_id, squawk.completion_percentage]);
 
     const currentUser = technicians.find(t => t.id === CURRENT_USER_ID)!;
 
@@ -91,6 +102,15 @@ export const SquawkDetailView: React.FC<SquawkDetailViewProps> = ({
     const handleAssignPart = (partId: string, quantity: number) => {
         handleUpdateSquawk({ ...squawk, used_parts: [...squawk.used_parts, { inventory_item_id: partId, quantity_used: quantity }] });
         setIsAssignPartPanelOpen(false);
+    };
+
+    const handleAssignTech = (techId: string) => {
+        if (squawk.assigned_technician_ids.includes(techId)) return;
+        handleUpdateSquawk({ ...squawk, assigned_technician_ids: [...squawk.assigned_technician_ids, techId] });
+    };
+
+    const handleUnassignTech = (techId: string) => {
+        handleUpdateSquawk({ ...squawk, assigned_technician_ids: squawk.assigned_technician_ids.filter(id => id !== techId) });
     };
 
     const handleAssignTool = (toolId: string) => {
@@ -264,12 +284,13 @@ export const SquawkDetailView: React.FC<SquawkDetailViewProps> = ({
                                 <input
                                     type="range"
                                     min={0} max={100} step={5}
-                                    value={squawk.completion_percentage ?? 0}
-                                    onChange={e => handleUpdateSquawk({
-                                        ...squawk,
-                                        completion_percentage: parseInt(e.target.value),
-                                    })}
-                                    className="w-full accent-sky-500"
+                                    value={draftPct}
+                                    onChange={e => setDraftPct(parseInt(e.target.value))}
+                                    onPointerUp={e => {
+                                        const val = parseInt((e.target as HTMLInputElement).value);
+                                        handleUpdateSquawk({ ...squawk, completion_percentage: val });
+                                    }}
+                                    className="w-full accent-sky-500 cursor-pointer"
                                 />
                                 <div className="flex justify-between text-[10px] text-slate-600 font-mono">
                                     <span>0%</span><span>25%</span><span>50%</span><span>75%</span><span>100%</span>
@@ -287,8 +308,12 @@ export const SquawkDetailView: React.FC<SquawkDetailViewProps> = ({
 
                         {/* Assigned Techs */}
                         <div className="space-y-2">
-                            <h5 className="font-mono text-xs text-slate-500 uppercase tracking-widest flex items-center gap-2">
-                                <UserGroupIcon className="w-3 h-3" /> Assigned Techs
+                            <h5 className="font-mono text-xs text-slate-500 uppercase tracking-widest flex items-center justify-between">
+                                <span className="flex items-center gap-2"><UserGroupIcon className="w-3 h-3" /> Assigned Techs</span>
+                                <button onClick={() => setIsAssignTechPanelOpen(true)}
+                                    className="text-[10px] text-sky-400 hover:text-sky-300 flex items-center gap-0.5 transition-colors">
+                                    <PlusIcon className="w-3 h-3" /> Assign
+                                </button>
                             </h5>
                             {assignedTechs.length === 0
                                 ? <p className="text-xs text-slate-600 italic">None assigned</p>
@@ -298,7 +323,13 @@ export const SquawkDetailView: React.FC<SquawkDetailViewProps> = ({
                                             <p className="text-xs text-slate-200 font-medium">{tech.name}</p>
                                             <p className="text-[10px] text-slate-500">{tech.role}</p>
                                         </div>
-                                        <span className="text-[10px] text-sky-400 font-mono">{tech.certifications.join(', ')}</span>
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-[10px] text-sky-400 font-mono">{tech.certifications.join(', ')}</span>
+                                            <button onClick={() => handleUnassignTech(tech.id)}
+                                                className="text-slate-600 hover:text-red-400 transition-colors">
+                                                <TrashIcon className="w-3 h-3" />
+                                            </button>
+                                        </div>
                                     </div>
                                 ))
                             }
@@ -381,39 +412,112 @@ export const SquawkDetailView: React.FC<SquawkDetailViewProps> = ({
                 {/* ── Sidebar ── */}
                 <div className="space-y-5 pl-0 lg:pl-5 lg:border-l border-white/5">
 
-                    {/* Time Logs */}
+                    {/* ── Time Tracking ── */}
                     <div>
                         <h5 className="font-mono text-xs text-slate-500 uppercase tracking-widest mb-2 flex items-center justify-between">
-                            <span className="flex items-center gap-2"><ClockIcon className="w-3 h-3" /> Time Logs</span>
-                            <span className="text-sky-400 font-mono">{totalLoggedHours.toFixed(1)}h</span>
+                            <span className="flex items-center gap-2"><ClockIcon className="w-3 h-3" /> Time Tracking</span>
+                            <span className="text-sky-400 font-mono text-[10px]">{totalLoggedHours.toFixed(1)}h billable</span>
                         </h5>
-                        <div className="space-y-1.5 mb-2 max-h-36 overflow-y-auto">
+
+                        {/* Task clock-in/out — only show if the current user is assigned to this squawk */}
+                        {(() => {
+                            const isAssigned   = squawk.assigned_technician_ids.includes(currentUser?.id ?? '');
+                            const orderId      = 'wo_id' in order ? order.wo_id : order.ro_id;
+                            const orderType    = ('wo_id' in order ? 'WO' : 'RO') as 'WO' | 'RO';
+                            const activeLog    = (activeTimeLogs ?? []).find(
+                                l => l.technician_id === currentUser?.id &&
+                                     l.squawk_id     === squawk.squawk_id &&
+                                     !l.end_time
+                            );
+                            const isClockedIn = !!activeLog;
+
+                            return (
+                                <div className={`mb-3 px-3 py-2.5 rounded-xl border transition-all ${
+                                    isClockedIn
+                                        ? 'bg-emerald-500/10 border-emerald-500/30'
+                                        : 'bg-white/3 border-white/10'
+                                }`}>
+                                    {isClockedIn ? (
+                                        <div className="space-y-1.5">
+                                            <div className="flex items-center gap-1.5">
+                                                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse flex-shrink-0" />
+                                                <span className="text-xs text-emerald-300 font-medium">Clocked in to task</span>
+                                            </div>
+                                            <p className="text-[10px] text-slate-500 font-mono">
+                                                Since {new Date(activeLog.start_time).toLocaleTimeString()}
+                                            </p>
+                                            <button
+                                                onClick={() => {
+                                                    onClockOutOfTask?.(activeLog.log_id, new Date().toISOString());
+                                                    showToast({ message: 'Clocked out of task.', type: 'info' });
+                                                }}
+                                                className="w-full text-xs font-medium px-3 py-1.5 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-300 border border-red-500/30 transition-colors">
+                                                Clock Out of Task
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        <div className="space-y-1.5">
+                                            <p className="text-[10px] text-slate-400">
+                                                {isAssigned
+                                                    ? 'You are assigned — clock in to charge billable time.'
+                                                    : 'Assign yourself to this task to clock in.'}
+                                            </p>
+                                            <button
+                                                disabled={!isAssigned || squawk.status === 'completed'}
+                                                onClick={() => {
+                                                    onClockInToTask?.({
+                                                        technician_id: currentUser!.id,
+                                                        start_time:    new Date().toISOString(),
+                                                        is_billable:   true,
+                                                        squawk_id:     squawk.squawk_id,
+                                                        order_id:      orderId,
+                                                        order_type:    orderType,
+                                                    });
+                                                    showToast({ message: `Clocked in to: ${squawk.description}`, type: 'success' });
+                                                }}
+                                                className="w-full text-xs font-medium px-3 py-1.5 rounded-lg bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/30 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
+                                                Clock In to Task
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })()}
+
+                        {/* Past time logs list */}
+                        <div className="space-y-1 mb-2 max-h-40 overflow-y-auto">
                             {squawk.time_logs.length === 0
                                 ? <p className="text-xs text-slate-600 italic">No time logged</p>
                                 : squawk.time_logs.map(log => {
                                     const tech = technicians.find(t => t.id === log.technician_id);
-                                    const hrs = log.end_time
-                                        ? ((new Date(log.end_time).getTime() - new Date(log.start_time).getTime()) / 3600000).toFixed(1)
+                                    const hrs  = log.end_time
+                                        ? ((new Date(log.end_time).getTime() - new Date(log.start_time).getTime()) / 3_600_000).toFixed(2)
                                         : '…';
                                     return (
-                                        <div key={log.log_id} className="flex items-center justify-between bg-white/5 rounded px-2 py-1.5">
+                                        <div key={log.log_id} className="flex items-center justify-between bg-white/3 rounded-lg px-2.5 py-1.5">
                                             <div>
                                                 <p className="text-xs text-slate-300">{tech?.name ?? 'Unknown'}</p>
                                                 <p className="text-[10px] text-slate-500 font-mono">
                                                     {new Date(log.start_time).toLocaleDateString()}
-                                                    {log.is_billable && <span className="ml-1.5 text-emerald-500">billable</span>}
+                                                    {log.is_billable
+                                                        ? <span className="ml-1.5 text-emerald-400">● billable</span>
+                                                        : <span className="ml-1.5 text-slate-600">○ non-billable</span>}
                                                 </p>
                                             </div>
-                                            <span className="text-xs font-mono text-sky-400">{hrs}h</span>
+                                            <span className="text-xs font-mono text-sky-400 flex-shrink-0">{hrs}h</span>
                                         </div>
                                     );
                                 })
                             }
                         </div>
-                        <button onClick={() => setIsTimeLogPanelOpen(true)}
-                            className="w-full flex items-center justify-center text-xs font-medium uppercase tracking-wider gap-1.5 bg-white/5 hover:bg-white/10 border border-white/10 p-2 rounded transition-colors">
-                            <PlusIcon className="w-3 h-3" /> Log Time
-                        </button>
+
+                        {/* Manual log button for admins / leads */}
+                        {permissions.canEditBilling && (
+                            <button onClick={() => setIsTimeLogPanelOpen(true)}
+                                className="w-full flex items-center justify-center text-xs font-medium uppercase tracking-wider gap-1.5 bg-white/5 hover:bg-white/10 border border-white/10 p-2 rounded-lg transition-colors">
+                                <PlusIcon className="w-3 h-3" /> Manual Log Entry
+                            </button>
+                        )}
                     </div>
 
                     {/* Signatures */}
@@ -458,6 +562,14 @@ export const SquawkDetailView: React.FC<SquawkDetailViewProps> = ({
             <TimeLogModal isOpen={isTimeLogPanelOpen} onClose={() => setIsTimeLogPanelOpen(false)} technicians={technicians} onLogTime={handleLogTime} currentUser={currentUser} />
             <AssignPartModal isOpen={isAssignPartPanelOpen} onClose={() => setIsAssignPartPanelOpen(false)} inventory={inventory} onAssignPart={handleAssignPart} />
             <AssignToolModal isOpen={isAssignToolPanelOpen} onClose={() => setIsAssignToolPanelOpen(false)} tools={tools} onAssignTool={handleAssignTool} />
+            <AssignTechnicianModal
+                isOpen={isAssignTechPanelOpen}
+                onClose={() => setIsAssignTechPanelOpen(false)}
+                technicians={technicians}
+                assignedIds={squawk.assigned_technician_ids}
+                onAssign={handleAssignTech}
+                onUnassign={handleUnassignTech}
+            />
             <SquawkAdminModal isOpen={isSquawkAdminModalOpen} onClose={() => setIsSquawkAdminModalOpen(false)} squawk={squawk} onSave={handleUpdateSquawk} />
             {isSignatureModalOpen && (
                 <SignatureConfirmationModal

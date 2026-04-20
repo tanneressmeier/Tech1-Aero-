@@ -115,8 +115,39 @@ const App: React.FC = () => {
         const user = state.technicians.find(t => t.id === technicianId);
         if (user) {
             setCurrentUser(user);
-            showToast({ message: `Welcome, ${user.name}!`, type: 'success' });
+            // Auto clock-in to shop (non-billable presence log) on login
+            const shopLog: TimeLog = {
+                log_id:        `shop-${user.id}-${Date.now()}`,
+                technician_id: user.id,
+                start_time:    new Date().toISOString(),
+                is_billable:   false,   // presence only — billable time comes from task clock-in
+            };
+            // Close any open shop logs for this tech before opening a new one
+            const existing = state.activeTimeLogs.find(l => l.technician_id === user.id && !l.squawk_id && !l.end_time);
+            if (existing) {
+                dispatch({ type: 'CLOCK_OUT_TASK', payload: { logId: existing.log_id, endTime: new Date().toISOString() } });
+            }
+            dispatch({ type: 'ADD_ACTIVE_TIME_LOG', payload: shopLog });
+            showToast({ message: `Welcome, ${user.name}! Clocked in to shop.`, type: 'success' });
         }
+    };
+
+    // ── Task-level time tracking ──────────────────────────────────────────
+    const handleClockInToTask = (log: Omit<TimeLog, 'log_id'>) => {
+        // Only one active task clock-in per tech at a time
+        const existing = state.activeTimeLogs.find(
+            l => l.technician_id === log.technician_id && l.squawk_id && !l.end_time
+        );
+        if (existing) {
+            // Auto clock-out of previous task before clocking into new one
+            dispatch({ type: 'CLOCK_OUT_TASK', payload: { logId: existing.log_id, endTime: new Date().toISOString() } });
+        }
+        const newLog: TimeLog = { ...log, log_id: `task-${Date.now()}` };
+        dispatch({ type: 'ADD_ACTIVE_TIME_LOG', payload: newLog });
+    };
+
+    const handleClockOutOfTask = (logId: string, endTime: string) => {
+        dispatch({ type: 'CLOCK_OUT_TASK', payload: { logId, endTime } });
     };
 
     const handleNavigate = (link: { view: View, orderId?: string }) => {
@@ -152,10 +183,12 @@ const App: React.FC = () => {
                 const updatedOrder = await api.updateRepairOrder(order);
                 dispatch({ type: 'SET_REPAIR_ORDERS', payload: state.repairOrders.map(ro => ro.ro_id === updatedOrder.ro_id ? updatedOrder : ro) });
             }
-            showToast({ message: `Order updated successfully.`, type: 'success' });
+            // No success toast here — this fires on every field edit (resolution notes,
+            // stage changes, slider) and would spam. Callers show their own toasts
+            // for explicit user actions (signatures, assignments, etc.)
         } catch (error) {
-            console.error("Failed to update order:", error);
-            showToast({ message: 'Failed to update order.', type: 'error' });
+            console.error('Failed to update order:', error);
+            showToast({ message: 'Failed to save order changes.', type: 'error' });
         }
     };
 
@@ -489,7 +522,32 @@ const App: React.FC = () => {
             case 'tooling': return <ToolingDashboard tools={state.tools} toolKits={state.toolKits} neededTools={state.neededTools} onAddTool={handleAddToolDirect} onUpdateTool={handleUpdateToolDirect} onDeleteTool={handleDeleteToolDirect} onSetTools={handleSetTools} onSetKits={handleSetKits} onSetNeededTools={handleSetNeededTools} />;
             case 'inventory': return <InventoryDashboard parts={[...state.partsInventory]} onCreatePurchaseOrder={(items) => { /* logic */ }} onUpdatePart={handleUpdatePart} />;
             case 'consumables': return <ConsumablesDashboard consumables={state.consumables} onUpdateConsumable={handleUpdateConsumable} onCreatePurchaseOrder={(items) => { /* logic */ }} />;
-            case 'personnel': return <PersonnelDashboard technicians={state.technicians} workOrders={state.workOrders} repairOrders={state.repairOrders} generalTimeLogs={state.generalTimeLogs} activeTimeLogs={state.activeTimeLogs} currentUser={currentUser!} onAddTechnician={handleAddTechnician} onUpdateTechnician={handleUpdateTechnician} onClockIn={(techId) => { const newLog: TimeLog = {log_id: `tl-${Date.now()}`, technician_id: techId, start_time: new Date().toISOString(), is_billable: false }; dispatch({type: 'SET_ACTIVE_TIME_LOGS', payload: [...state.activeTimeLogs, newLog]}); }} onClockOut={(techId) => { const logToEnd = state.activeTimeLogs.find(l => l.technician_id === techId); if(logToEnd){ const endedLog = {...logToEnd, end_time: new Date().toISOString() }; dispatch({type: 'SET_GENERAL_TIME_LOGS', payload: [...state.generalTimeLogs, endedLog]}); dispatch({type: 'SET_ACTIVE_TIME_LOGS', payload: state.activeTimeLogs.filter(l => l.technician_id !== techId)}); } }}/>;
+            case 'personnel': return <PersonnelDashboard
+                technicians={state.technicians}
+                workOrders={state.workOrders}
+                repairOrders={state.repairOrders}
+                generalTimeLogs={state.generalTimeLogs}
+                activeTimeLogs={state.activeTimeLogs}
+                currentUser={currentUser!}
+                onAddTechnician={handleAddTechnician}
+                onUpdateTechnician={handleUpdateTechnician}
+                onClockIn={(techId) => {
+                    const existing = state.activeTimeLogs.find(l => l.technician_id === techId && !l.squawk_id && !l.end_time);
+                    if (existing) return; // already clocked in to shop
+                    dispatch({ type: 'ADD_ACTIVE_TIME_LOG', payload: {
+                        log_id: `shop-${techId}-${Date.now()}`,
+                        technician_id: techId,
+                        start_time: new Date().toISOString(),
+                        is_billable: false,
+                    }});
+                }}
+                onClockOut={(techId) => {
+                    // Clock out of shop AND any active task
+                    state.activeTimeLogs
+                        .filter(l => l.technician_id === techId && !l.end_time)
+                        .forEach(l => dispatch({ type: 'CLOCK_OUT_TASK', payload: { logId: l.log_id, endTime: new Date().toISOString() } }));
+                }}
+            />;
             case 'purchase_orders': return <PurchaseOrderDashboard purchaseOrders={state.purchaseOrders} inventory={[...state.partsInventory, ...state.consumables]} onUpdatePurchaseOrder={handleUpdatePurchaseOrder} onReceiveFromPackingSlip={handleReceiveFromPackingSlip} onConfirmReception={handleConfirmReception} workOrders={state.workOrders} repairOrders={state.repairOrders} />;
             case 'data_migration': return <DataMigrationDashboard aircraftList={state.aircraftList} onImportData={() => {}} />;
             case 'calendar': return <CalendarView workOrders={state.workOrders} repairOrders={state.repairOrders} technicians={state.technicians} onSaveAssignments={handleSaveAssignments} onUpdateOrder={handleUpdateOrder} onNavigateToOrder={(view, id, initialView) => handleSelectOrder(view === 'work_orders' ? 'wo' : 'ro', id, initialView)} />;
@@ -498,11 +556,11 @@ const App: React.FC = () => {
             case 'work_order_detail':
                 const wo = state.workOrders.find(o => o.wo_id === selectedOrder?.id);
                 const woAircraft = state.aircraftList.find(a => a.id === wo?.aircraft_id);
-                return wo && woAircraft ? <WorkOrderDetail order={wo} aircraft={woAircraft} technicians={state.technicians} inventory={[...state.partsInventory, ...state.consumables]} tools={state.tools} onBack={handleBackToDashboard} onUpdateOrder={handleUpdateOrder} permissions={permissions} initialViewMode={selectedOrder?.initialView} /> : <div>Work Order not found</div>;
+                return wo && woAircraft ? <WorkOrderDetail order={wo} aircraft={woAircraft} technicians={state.technicians} inventory={[...state.partsInventory, ...state.consumables]} tools={state.tools} onBack={handleBackToDashboard} onUpdateOrder={handleUpdateOrder} permissions={permissions} initialViewMode={selectedOrder?.initialView} activeTimeLogs={state.activeTimeLogs} onClockInToTask={handleClockInToTask} onClockOutOfTask={handleClockOutOfTask} /> : <div>Work Order not found</div>;
             case 'repair_order_detail':
                 const ro = state.repairOrders.find(o => o.ro_id === selectedOrder?.id);
                 const roAircraft = state.aircraftList.find(a => a.id === ro?.aircraft_id);
-                return ro && roAircraft ? <RepairOrderDetail order={ro} aircraft={roAircraft} technicians={state.technicians} inventory={[...state.partsInventory, ...state.consumables]} tools={state.tools} onBack={handleBackToDashboard} onUpdateOrder={handleUpdateOrder} permissions={permissions} /> : <div>Repair Order not found</div>;
+                return ro && roAircraft ? <RepairOrderDetail order={ro} aircraft={roAircraft} technicians={state.technicians} inventory={[...state.partsInventory, ...state.consumables]} tools={state.tools} onBack={handleBackToDashboard} onUpdateOrder={handleUpdateOrder} permissions={permissions} activeTimeLogs={state.activeTimeLogs} onClockInToTask={handleClockInToTask} onClockOutOfTask={handleClockOutOfTask} /> : <div>Repair Order not found</div>;
             default: return <div className="p-8 text-center text-slate-400">Select a view from the sidebar.</div>;
         }
     };
