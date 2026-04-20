@@ -16,6 +16,7 @@ export type View =
   | 'purchase_orders'
   | 'data_migration'
   | 'analytics'
+  | 'profitability'
   | 'calendar';
 
 export interface Notification {
@@ -29,7 +30,13 @@ export interface Notification {
 export interface AppSettings {
     profile:       { name: string; email: string };
     organization:  { name: string; repairStationNum: string; address: string };
-    financials:    { laborRate: number; shopSupplies: number; taxRate: number };
+    financials:    {
+        laborRate: number;           // $/hr base
+        shopSupplies: number;        // percentage
+        taxRate: number;             // percentage
+        benefitsLoad?: number;       // percentage added to labor rate (benefits, payroll tax, insurance)
+        hangarOverhead?: number;     // $/hr flat overhead (facility, utilities, admin allocation)
+    };
     notifications: { emailWorkOrder: boolean; emailInventory: boolean; pushCalibration: boolean };
     appearance:    {
         themeMode: 'dark' | 'light' | 'system';
@@ -86,6 +93,12 @@ export interface Aircraft {
     maintenance_events: MaintenanceEvent[];
     logbook_entries:   LogbookEntry[];
     ad_compliance:     ADCompliance[];
+
+    // Physical dimensions for hangar stacking (Phase 3 Area 1)
+    // If omitted, lookup table in data/aircraftDimensions.ts provides defaults by model
+    wingspan_ft?:      number;
+    length_ft?:        number;
+    tail_height_ft?:   number;
 }
 
 export interface Supplier {
@@ -198,6 +211,7 @@ export interface Squawk {
     used_tool_ids:                string[];
     used_parts:                   UsedPart[];
     resolution:                   string;
+    completion_percentage?:       number;   // 0-100, technician-updated (Phase 3 Area 4)
     signatures: {
         work_complete:     Signature | null;
         operational_check: Signature | null;
@@ -216,6 +230,12 @@ export interface WorkOrder {
     priority:            'routine' | 'urgent' | 'aog';
     squawks:             Squawk[];
     location?:           string;
+
+    // Profitability tracking (Phase 3 Area 4)
+    quoted_labor_hours?:    number;   // quoted at sell time; if omitted, falls back to sum of squawk estimates
+    burdened_labor_rate?:   number;   // override Settings default; $/hr including benefits + overhead
+    quoted_parts_total?:    number;   // quoted parts revenue
+    quoted_total?:          number;   // full quoted price to customer
 }
 
 export interface RepairOrder {
@@ -228,6 +248,12 @@ export interface RepairOrder {
     priority:            'routine' | 'urgent' | 'aog';
     squawks:             Squawk[];
     location?:           string;
+
+    // Profitability tracking (Phase 3 Area 4)
+    quoted_labor_hours?:  number;
+    burdened_labor_rate?: number;
+    quoted_parts_total?:  number;
+    quoted_total?:        number;
 }
 
 export interface PurchaseOrderItem {

@@ -3,6 +3,7 @@ import { Squawk, WorkOrder, RepairOrder, Aircraft, Technician, InventoryItem, To
 import {
     ClockIcon, CogIcon, UserGroupIcon, WrenchIcon, BeakerIcon, PencilIcon, PlusIcon,
     CheckBadgeIcon, LockClosedIcon, SparklesIcon, TrashIcon, ExclamationTriangleIcon,
+    ChartBarIcon,
 } from './icons.tsx';
 import TimeLogModal from './TimeLogModal.tsx';
 import AssignPartModal from './AssignPartModal.tsx';
@@ -216,6 +217,43 @@ export const SquawkDetailView: React.FC<SquawkDetailViewProps> = ({
                             className="w-full bg-[#0B0F17]/50 border border-white/10 rounded-lg p-3 text-sm text-slate-300 focus:outline-none focus:ring-1 focus:ring-sky-500/50 resize-none"
                             placeholder="Describe work performed…"
                         />
+                    </div>
+
+                    {/* Completion percentage slider */}
+                    <div>
+                        <h5 className="font-mono text-xs text-slate-500 uppercase tracking-widest mb-2 flex items-center justify-between">
+                            <span className="flex items-center gap-2">
+                                <ChartBarIcon className="w-3 h-3" /> Task Completion
+                            </span>
+                            <span className={`font-mono text-sm font-semibold ${
+                                (squawk.completion_percentage ?? 0) === 100 ? 'text-emerald-400'
+                                : (squawk.completion_percentage ?? 0) >= 50 ? 'text-sky-400'
+                                : 'text-slate-400'
+                            }`}>
+                                {squawk.status === 'completed' ? '100' : (squawk.completion_percentage ?? 0)}%
+                            </span>
+                        </h5>
+                        {squawk.status !== 'completed' ? (
+                            <div className="space-y-1.5">
+                                <input
+                                    type="range"
+                                    min={0} max={100} step={5}
+                                    value={squawk.completion_percentage ?? 0}
+                                    onChange={e => handleUpdateSquawk({
+                                        ...squawk,
+                                        completion_percentage: parseInt(e.target.value),
+                                    })}
+                                    className="w-full accent-sky-500"
+                                />
+                                <div className="flex justify-between text-[10px] text-slate-600 font-mono">
+                                    <span>0%</span><span>25%</span><span>50%</span><span>75%</span><span>100%</span>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="h-1.5 bg-emerald-500/30 rounded-full overflow-hidden">
+                                <div className="h-full bg-emerald-400 w-full" />
+                            </div>
+                        )}
                     </div>
 
                     {/* 3-column resource grid */}

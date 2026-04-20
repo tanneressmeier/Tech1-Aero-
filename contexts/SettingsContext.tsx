@@ -13,9 +13,11 @@ const DEFAULT_SETTINGS: AppSettings = {
         address: '123 Hangar Row\nAviation City, ST 12345',
     },
     financials: {
-        laborRate: 125.00,
-        shopSupplies: 10,
-        taxRate: 8.25,
+        laborRate:      125.00,
+        shopSupplies:   10,
+        taxRate:        8.25,
+        benefitsLoad:   35,    // % — benefits, payroll tax, workers comp on top of base rate
+        hangarOverhead: 22,    // $/hr — facility, utilities, admin amortized per labor hour
     },
     notifications: {
         emailWorkOrder: true,

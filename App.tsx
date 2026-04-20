@@ -34,6 +34,7 @@ import { CalendarView } from './components/CalendarView.tsx';
 import { GlobalSearchBar } from './components/GlobalSearchBar.tsx';
 import { NotificationCenter } from './components/NotificationCenter.tsx';
 import { AnalyticsDashboard } from './components/AnalyticsDashboard.tsx';
+import { ProfitabilityDashboard } from './components/ProfitabilityDashboard.tsx';
 import { SettingsModal } from './components/SettingsModal.tsx';
 
 // Icons
@@ -52,6 +53,7 @@ import {
   ExclamationCircleIcon,
   UserCircleIcon,
   ChartPieIcon,
+  CurrencyDollarIcon,
 } from './components/icons.tsx';
 
 type DetailedView = 'work_order_detail' | 'repair_order_detail';
@@ -68,6 +70,7 @@ const navItems: { view: View; label: string; icon: React.FC<any>; adminOnly?: bo
     { view: 'consumables', label: 'Consumables', icon: BeakerIcon },
     { view: 'personnel', label: 'Personnel', icon: UsersIcon, adminOnly: true },
     { view: 'analytics', label: 'Analytics', icon: ChartPieIcon, adminOnly: true },
+    { view: 'profitability', label: 'Profitability', icon: CurrencyDollarIcon, adminOnly: true },
     { view: 'purchase_orders', label: 'Procurement', icon: ShoppingCartIcon },
     { view: 'data_migration', label: 'Data Migration', icon: CircleStackIcon, adminOnly: true },
 ];
@@ -491,6 +494,7 @@ const App: React.FC = () => {
             case 'data_migration': return <DataMigrationDashboard aircraftList={state.aircraftList} onImportData={() => {}} />;
             case 'calendar': return <CalendarView workOrders={state.workOrders} repairOrders={state.repairOrders} technicians={state.technicians} onSaveAssignments={handleSaveAssignments} onUpdateOrder={handleUpdateOrder} onNavigateToOrder={(view, id, initialView) => handleSelectOrder(view === 'work_orders' ? 'wo' : 'ro', id, initialView)} />;
             case 'analytics': return <AnalyticsDashboard technicians={state.technicians} generalTimeLogs={state.generalTimeLogs} workOrders={state.workOrders} repairOrders={state.repairOrders} aircraftList={state.aircraftList} partsInventory={state.partsInventory} />;
+            case 'profitability': return <ProfitabilityDashboard workOrders={state.workOrders} repairOrders={state.repairOrders} inventory={[...state.partsInventory, ...state.consumables]} aircraftList={state.aircraftList} onNavigateToOrder={(view, id) => handleSelectOrder(view === 'work_orders' ? 'wo' : 'ro', id)} />;
             case 'work_order_detail':
                 const wo = state.workOrders.find(o => o.wo_id === selectedOrder?.id);
                 const woAircraft = state.aircraftList.find(a => a.id === wo?.aircraft_id);

@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { WorkOrder, Aircraft, Technician, InventoryItem, Tool, Squawk, Signature } from '../types.ts';
+import { WorkOrder, RepairOrder, Aircraft, Technician, InventoryItem, Tool, Squawk, Signature } from '../types.ts';
 import { SquawkDetailView } from './SquawkDetailView.tsx';
 import { SquawkKanbanBoard } from './SquawkKanbanBoard.tsx';
 import { SquawkGantt } from './SquawkGantt.tsx';
@@ -11,6 +11,7 @@ import {
     WrenchIcon, CheckBadgeIcon, ExclamationTriangleIcon,
 } from './icons.tsx';
 import { compareToolsClientSide } from '../services/geminiService.ts';
+import { ProfitabilityPanel } from './ProfitabilityPanel.tsx';
 
 interface WorkOrderDetailProps {
     order: WorkOrder;
@@ -192,6 +193,12 @@ export const WorkOrderDetail: React.FC<WorkOrderDetailProps> = ({
                         )}
                     </div>
                 )}
+
+                {/* ── Quote Baseline (editable — feeds ProfitabilityPanel) ── */}
+                <QuoteBaselineEditor order={order} onUpdate={onUpdateOrder} />
+
+                {/* ── Profitability Panel (Phase 3 Area 4) ─────────────── */}
+                <ProfitabilityPanel order={order} inventory={inventory} />
             </div>
 
             {/* Squawk views */}
@@ -220,6 +227,87 @@ export const WorkOrderDetail: React.FC<WorkOrderDetailProps> = ({
             <SignatureConfirmationModal isOpen={!!pendingCompletionSquawkId}
                 onClose={() => setPendingCompletionSquawkId(null)}
                 onConfirm={handleSignatureConfirm} signatureTypeLabel="Work Complete" />
+        </div>
+    );
+};
+
+// ─── QuoteBaselineEditor ──────────────────────────────────────────────────────
+// Inline collapsible section that lets Admins/Leads set the quoted hours,
+// quoted revenue, and optional burdened-rate override for profitability tracking.
+// Lives between the Tool Planning Summary and the ProfitabilityPanel.
+
+const QuoteBaselineEditor: React.FC<{
+    order: WorkOrder | RepairOrder;
+    onUpdate: (order: WorkOrder | RepairOrder) => void;
+}> = ({ order, onUpdate }) => {
+    const [open, setOpen] = React.useState(false);
+    const totalEstHours = order.squawks.reduce((s, sq) => s + (sq.hours_estimate ?? 0), 0);
+
+    const field = (
+        label: string,
+        value: number | undefined,
+        placeholder: string,
+        onChange: (v: number | undefined) => void,
+        hint: string,
+    ) => (
+        <div>
+            <label className="block text-[10px] font-mono text-slate-500 uppercase tracking-wider mb-1">{label}</label>
+            <input
+                type="number" min="0" step="any"
+                value={value ?? ''}
+                placeholder={placeholder}
+                onChange={e => onChange(e.target.value === '' ? undefined : parseFloat(e.target.value))}
+                className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500/30"
+            />
+            <p className="text-[10px] text-slate-600 mt-0.5">{hint}</p>
+        </div>
+    );
+
+    return (
+        <div className="mt-5 pt-4 border-t border-white/5">
+            <button
+                onClick={() => setOpen(p => !p)}
+                className="w-full flex items-center justify-between text-xs font-mono text-slate-500 uppercase tracking-widest hover:text-slate-300 transition-colors">
+                <span className="flex items-center gap-2">
+                    <CurrencyDollarIcon className="w-3.5 h-3.5" />
+                    Quote Baseline
+                    {order.quoted_labor_hours
+                        ? <span className="text-sky-400 font-medium normal-case tracking-normal ml-1">
+                            {order.quoted_labor_hours}h quoted · ${order.quoted_total?.toLocaleString() ?? '—'} total
+                          </span>
+                        : <span className="text-slate-600 font-normal normal-case tracking-normal ml-1">
+                            not set — using estimate ({totalEstHours}h)
+                          </span>
+                    }
+                </span>
+                <span className="text-slate-600">{open ? '▲' : '▼'}</span>
+            </button>
+
+            {open && (
+                <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3">
+                    {field(
+                        'Quoted Labor Hours',
+                        order.quoted_labor_hours,
+                        `${totalEstHours} (from estimates)`,
+                        v => onUpdate({ ...order, quoted_labor_hours: v }),
+                        'Hours sold to the customer at the base labor rate',
+                    )}
+                    {field(
+                        'Quoted Revenue ($)',
+                        order.quoted_total,
+                        'e.g. 12500',
+                        v => onUpdate({ ...order, quoted_total: v }),
+                        'Total customer-facing price (labor + parts + fees)',
+                    )}
+                    {field(
+                        'Burdened Rate Override ($/hr)',
+                        order.burdened_labor_rate,
+                        'Uses Settings default',
+                        v => onUpdate({ ...order, burdened_labor_rate: v }),
+                        'Override fully-burdened cost rate for this order only',
+                    )}
+                </div>
+            )}
         </div>
     );
 };
