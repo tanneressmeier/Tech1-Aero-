@@ -129,6 +129,7 @@ export interface InventoryItem {
     suppliers:             Supplier[];
     expiration_date?:      string;
     certification?:        PartCertification;
+    expected_delivery_date?: string;   // ISO date — set when item is on backorder (Phase 3)
 }
 
 // ---------------------------------------------------------------------------
@@ -184,11 +185,21 @@ export interface UsedPart {
     quantity_used:     number;
 }
 
+export type SquawkStage =
+    | 'Teardown'
+    | 'Inspection'
+    | 'Parts Pending'
+    | 'Reassembly'
+    | 'Testing'
+    | 'Complete';
+
 export interface Squawk {
     squawk_id:                    string;
     description:                  string;
     status:                       'open' | 'in_progress' | 'completed' | 'on_hold';
     priority:                     'routine' | 'urgent' | 'aog';
+    stage?:                       SquawkStage;        // Phase 3 — workflow stage
+    dependencies?:                string[];           // Phase 3 — squawk_ids that must finish first
     time_logs:                    TimeLog[];
     category:                     string;
     rii_inspection_enabled:       boolean;
@@ -211,7 +222,7 @@ export interface Squawk {
     used_tool_ids:                string[];
     used_parts:                   UsedPart[];
     resolution:                   string;
-    completion_percentage?:       number;   // 0-100, technician-updated (Phase 3 Area 4)
+    completion_percentage?:       number;
     signatures: {
         work_complete:     Signature | null;
         operational_check: Signature | null;

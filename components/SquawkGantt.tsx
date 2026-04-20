@@ -1,130 +1,166 @@
+// =============================================================================
+// SquawkGantt.tsx — Phase 3: Living Gantt Chart
+//
+// Features:
+//   • Dependency-aware scheduling (topological sort via ganttEngine)
+//   • Parts cascade: squawks shift right when required parts are on backorder
+//   • SHIFTED badge with tooltip showing which part caused the delay
+//   • Stage badges per row (Teardown → Inspection → Parts Pending → ...)
+//   • Dependency-blocked indicator when predecessors are incomplete
+//   • % to Completion bar in the footer driven by weighted squawk progress
+//   • Projected completion date computed from the schedule
+//   • Drag bars to override offsets (preserved as local UI state)
+// =============================================================================
 
-import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { WorkOrder, Squawk } from '../types.ts';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { WorkOrder, InventoryItem, SquawkStage } from '../types.ts';
+import {
+    computeGanttSchedule,
+    computeWoCompletion,
+    computeProjectedEndDate,
+    ScheduledSquawk,
+} from '../utils/ganttEngine.ts';
+import { ExclamationTriangleIcon, CheckBadgeIcon, ClockIcon } from './icons.tsx';
 
 interface SquawkGanttProps {
-    workOrder: WorkOrder;
+    workOrder:   WorkOrder;
+    inventory?:  InventoryItem[];  // optional — needed for parts cascade
 }
 
-// Visual configuration constants
-const PIXELS_PER_HOUR = 60; // 1 hour = 60px
-const HOUR_MARKER_INTERVAL = 4; // Show a label every 4 hours
-const HEADER_HEIGHT = 40;
-const ROW_HEIGHT = 48;
+// ── Constants ─────────────────────────────────────────────────────────────────
+const PX_PER_HOUR   = 64;
+const ROW_H         = 52;
+const LABEL_W       = 260;
+const TICK_INTERVAL = 4;   // show tick every N hours
 
-interface TaskState {
-    offsetHours: number; // Start time offset from WO start (0)
-}
+// ── Stage badge colours ───────────────────────────────────────────────────────
+const STAGE_STYLES: Record<SquawkStage | 'default', string> = {
+    'Teardown':      'bg-slate-500/20 text-slate-300 border-slate-500/30',
+    'Inspection':    'bg-sky-500/20   text-sky-300   border-sky-500/30',
+    'Parts Pending': 'bg-amber-500/20 text-amber-300 border-amber-500/30',
+    'Reassembly':    'bg-indigo-500/20 text-indigo-300 border-indigo-500/30',
+    'Testing':       'bg-purple-500/20 text-purple-300 border-purple-500/30',
+    'Complete':      'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
+    'default':       'bg-white/5 text-slate-400 border-white/10',
+};
 
-export const SquawkGantt: React.FC<SquawkGanttProps> = ({ workOrder }) => {
-    // Local state to track task offsets (simulated start times)
-    const [taskOffsets, setTaskOffsets] = useState<Record<string, number>>({});
-    
-    // Drag state
-    const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null);
-    const [dragStartX, setDragStartX] = useState<number>(0);
-    const [initialDragOffset, setInitialDragOffset] = useState<number>(0);
-    
-    const containerRef = useRef<HTMLDivElement>(null);
+const BAR_COLOURS = {
+    aog:     'bg-red-500/80   border-red-400/60',
+    urgent:  'bg-amber-500/80 border-amber-400/60',
+    routine: 'bg-sky-500/80   border-sky-400/60',
+};
 
-    // Initialize "Waterfall" schedule on mount or WO change
-    useEffect(() => {
-        let currentOffset = 0;
-        const newOffsets: Record<string, number> = {};
-        
-        workOrder.squawks.forEach((squawk) => {
-            newOffsets[squawk.squawk_id] = currentOffset;
-            // Add duration to offset for the next task (sequential waterfall)
-            // Minimum duration 1 hour for viz
-            const duration = Math.max(squawk.hours_estimate || 1, 1);
-            currentOffset += duration;
-        });
-        
-        setTaskOffsets(newOffsets);
-    }, [workOrder.wo_id, workOrder.squawks]);
+// ── Tooltip ───────────────────────────────────────────────────────────────────
+const Tooltip: React.FC<{ text: string; children: React.ReactNode }> = ({ text, children }) => (
+    <div className="relative group/tip inline-flex">
+        {children}
+        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50 hidden group-hover/tip:block
+                        w-56 bg-slate-800 border border-white/20 rounded-lg px-3 py-2 text-xs text-slate-200 shadow-xl pointer-events-none">
+            {text}
+            <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-800" />
+        </div>
+    </div>
+);
 
-    // Calculate total duration for container width
-    const totalDuration = useMemo(() => {
-        let maxEnd = 0;
-        workOrder.squawks.forEach(s => {
-            const start = taskOffsets[s.squawk_id] || 0;
-            const duration = Math.max(s.hours_estimate || 1, 1);
-            if (start + duration > maxEnd) maxEnd = start + duration;
-        });
-        // Add some buffer
-        return Math.max(maxEnd + 5, 24); // Minimum 24 hour view
-    }, [workOrder.squawks, taskOffsets]);
+// ── Main component ────────────────────────────────────────────────────────────
+export const SquawkGantt: React.FC<SquawkGanttProps> = ({ workOrder, inventory = [] }) => {
+    // Computed base schedule from engine
+    const baseSchedule = useMemo(
+        () => computeGanttSchedule(workOrder, inventory),
+        [workOrder, inventory]
+    );
 
-    const handleMouseDown = (e: React.MouseEvent, squawkId: string) => {
-        e.preventDefault(); // Prevent text selection
-        setDraggingTaskId(squawkId);
-        setDragStartX(e.clientX);
-        setInitialDragOffset(taskOffsets[squawkId] || 0);
+    // Local drag overrides (hour offsets keyed by squawk_id)
+    const [dragOffsets, setDragOffsets] = useState<Record<string, number>>({});
+
+    // Reset overrides when WO changes
+    useEffect(() => { setDragOffsets({}); }, [workOrder.wo_id]);
+
+    // Merge base schedule with drag overrides
+    const schedule: ScheduledSquawk[] = useMemo(() =>
+        baseSchedule.map(s => ({
+            ...s,
+            startHour: dragOffsets[s.squawk.squawk_id] ?? s.startHour,
+            endHour:   (dragOffsets[s.squawk.squawk_id] ?? s.startHour) + s.durationHours,
+        })),
+        [baseSchedule, dragOffsets]
+    );
+
+    const totalHours = useMemo(() =>
+        Math.max(...schedule.map(s => s.endHour), 24) + 8,
+        [schedule]
+    );
+
+    const woCompletion      = useMemo(() => computeWoCompletion(workOrder),  [workOrder]);
+    const projectedEnd      = useMemo(() => computeProjectedEndDate(workOrder, schedule), [workOrder, schedule]);
+    const hasPartsDelays    = schedule.some(s => s.isShifted);
+    const hasDependencyGaps = schedule.some(s => s.isDependencyBlocked);
+
+    // ── Drag handling ─────────────────────────────────────────────────────────
+    const dragging = useRef<{ id: string; startX: number; startOffset: number } | null>(null);
+
+    const onMouseDown = (e: React.MouseEvent, id: string, currentOffset: number) => {
+        e.preventDefault();
+        dragging.current = { id, startX: e.clientX, startOffset: currentOffset };
+        window.addEventListener('mousemove', onMouseMove);
+        window.addEventListener('mouseup',   onMouseUp);
     };
 
-    const handleMouseMove = (e: MouseEvent) => {
-        if (!draggingTaskId) return;
-
-        const deltaPixels = e.clientX - dragStartX;
-        const deltaHours = deltaPixels / PIXELS_PER_HOUR;
-        
-        let newOffset = initialDragOffset + deltaHours;
-        // Clamp to 0 (cannot start before WO starts)
-        if (newOffset < 0) newOffset = 0;
-
-        setTaskOffsets(prev => ({
-            ...prev,
-            [draggingTaskId]: newOffset
-        }));
+    const onMouseMove = (e: MouseEvent) => {
+        if (!dragging.current) return;
+        const { id, startX, startOffset } = dragging.current;
+        const delta  = (e.clientX - startX) / PX_PER_HOUR;
+        const newOff = Math.max(0, Math.round((startOffset + delta) * 4) / 4); // snap to 0.25h
+        setDragOffsets(prev => ({ ...prev, [id]: newOff }));
     };
 
-    const handleMouseUp = () => {
-        setDraggingTaskId(null);
+    const onMouseUp = () => {
+        dragging.current = null;
+        window.removeEventListener('mousemove', onMouseMove);
+        window.removeEventListener('mouseup',   onMouseUp);
     };
 
-    // Attach global listeners for drag operation
-    useEffect(() => {
-        if (draggingTaskId) {
-            window.addEventListener('mousemove', handleMouseMove);
-            window.addEventListener('mouseup', handleMouseUp);
-        } else {
-            window.removeEventListener('mousemove', handleMouseMove);
-            window.removeEventListener('mouseup', handleMouseUp);
-        }
-        return () => {
-            window.removeEventListener('mousemove', handleMouseMove);
-            window.removeEventListener('mouseup', handleMouseUp);
-        };
-    }, [draggingTaskId, dragStartX, initialDragOffset]);
+    const resetOverrides = () => setDragOffsets({});
 
-    const getBarColor = (priority: string) => {
-        switch(priority) {
-            case 'aog': return 'bg-red-500 border-red-400';
-            case 'urgent': return 'bg-amber-500 border-amber-400';
-            default: return 'bg-sky-500 border-sky-400';
-        }
-    };
-
+    // ── Render ────────────────────────────────────────────────────────────────
     return (
-        <div className="flex flex-col h-full bg-slate-900/50 rounded-lg overflow-hidden border border-white/10 relative">
-            <div className="flex-1 overflow-auto relative" ref={containerRef}>
-                <div 
-                    style={{ 
-                        width: `${totalDuration * PIXELS_PER_HOUR}px`,
-                        minWidth: '100%',
-                        position: 'relative'
-                    }}
-                >
-                    {/* Time Grid Header */}
-                    <div className="sticky top-0 z-20 bg-slate-800 border-b border-white/10 h-10 flex items-end">
-                        {Array.from({ length: Math.ceil(totalDuration) }).map((_, i) => (
-                            <div 
-                                key={i} 
-                                className={`flex-shrink-0 border-l border-white/5 h-full relative ${i % HOUR_MARKER_INTERVAL === 0 ? 'border-white/20' : ''}`}
-                                style={{ width: `${PIXELS_PER_HOUR}px` }}
-                            >
-                                {i % HOUR_MARKER_INTERVAL === 0 && (
-                                    <span className="absolute bottom-1 left-1 text-[10px] font-mono text-slate-400">
+        <div className="flex flex-col h-full bg-slate-900/50 rounded-xl border border-white/10 overflow-hidden">
+
+            {/* ── Status banner ── */}
+            {(hasPartsDelays || hasDependencyGaps) && (
+                <div className="flex items-center gap-4 px-4 py-2 bg-amber-500/10 border-b border-amber-500/20 text-xs">
+                    {hasPartsDelays && (
+                        <span className="flex items-center gap-1.5 text-amber-300">
+                            <ExclamationTriangleIcon className="w-3.5 h-3.5" />
+                            Parts delays are shifting tasks — see SHIFTED badges
+                        </span>
+                    )}
+                    {hasDependencyGaps && (
+                        <span className="flex items-center gap-1.5 text-sky-300">
+                            <ClockIcon className="w-3.5 h-3.5" />
+                            Some tasks blocked by incomplete predecessors
+                        </span>
+                    )}
+                </div>
+            )}
+
+            {/* ── Main scrollable canvas ── */}
+            <div className="flex-1 overflow-auto select-none">
+                <div style={{ width: `${LABEL_W + totalHours * PX_PER_HOUR}px`, minWidth: '100%' }}>
+
+                    {/* ── Time header ── */}
+                    <div className="sticky top-0 z-20 flex bg-slate-800/95 backdrop-blur border-b border-white/10"
+                        style={{ height: 40 }}>
+                        {/* Label column spacer */}
+                        <div className="sticky left-0 z-30 bg-slate-800/95 border-r border-white/10 flex-shrink-0"
+                            style={{ width: LABEL_W }} />
+                        {/* Hour ticks */}
+                        {Array.from({ length: Math.ceil(totalHours) }).map((_, i) => (
+                            <div key={i}
+                                className="flex-shrink-0 border-l border-white/5 flex items-end pb-1 relative"
+                                style={{ width: PX_PER_HOUR }}>
+                                {i % TICK_INTERVAL === 0 && (
+                                    <span className="absolute left-1 bottom-1 text-[10px] font-mono text-slate-500">
                                         +{i}h
                                     </span>
                                 )}
@@ -132,55 +168,94 @@ export const SquawkGantt: React.FC<SquawkGanttProps> = ({ workOrder }) => {
                         ))}
                     </div>
 
-                    {/* Grid Background Lines */}
-                    <div className="absolute inset-0 top-10 z-0 flex pointer-events-none">
-                        {Array.from({ length: Math.ceil(totalDuration) }).map((_, i) => (
-                            <div 
-                                key={`grid-${i}`} 
-                                className={`flex-shrink-0 border-l border-white/5 h-full ${i % HOUR_MARKER_INTERVAL === 0 ? 'border-white/10' : ''}`}
-                                style={{ width: `${PIXELS_PER_HOUR}px` }}
-                            />
-                        ))}
-                    </div>
+                    {/* ── Grid + rows ── */}
+                    <div className="relative">
+                        {/* Background vertical grid lines */}
+                        <div className="absolute inset-0 flex pointer-events-none" style={{ marginLeft: LABEL_W }}>
+                            {Array.from({ length: Math.ceil(totalHours) }).map((_, i) => (
+                                <div key={i}
+                                    className={`flex-shrink-0 border-l h-full ${i % TICK_INTERVAL === 0 ? 'border-white/10' : 'border-white/5'}`}
+                                    style={{ width: PX_PER_HOUR }} />
+                            ))}
+                        </div>
 
-                    {/* Task Rows */}
-                    <div className="relative z-10 pt-2 pb-20">
-                        {workOrder.squawks.map((squawk, index) => {
-                            const offset = taskOffsets[squawk.squawk_id] || 0;
-                            const duration = Math.max(squawk.hours_estimate || 1, 1);
-                            const width = duration * PIXELS_PER_HOUR;
-                            const left = offset * PIXELS_PER_HOUR;
-                            const colorClass = getBarColor(squawk.priority);
+                        {/* ── Squawk rows ── */}
+                        {schedule.map((s, idx) => {
+                            const { squawk, startHour, durationHours, isShifted, shiftReasonParts, isDependencyBlocked } = s;
+                            const barLeft  = LABEL_W + startHour * PX_PER_HOUR;
+                            const barWidth = Math.max(durationHours * PX_PER_HOUR, 24);
+                            const barCol   = BAR_COLOURS[squawk.priority] ?? BAR_COLOURS.routine;
+                            const stageKey = (squawk.stage ?? 'default') as SquawkStage | 'default';
+                            const stageStyle = STAGE_STYLES[stageKey] ?? STAGE_STYLES.default;
+
+                            // Completion fill width
+                            const pct = squawk.status === 'completed' ? 100 : (squawk.completion_percentage ?? 0);
 
                             return (
-                                <div 
-                                    key={squawk.squawk_id}
-                                    className="relative h-12 flex items-center hover:bg-white/5 transition-colors border-b border-white/5"
-                                >
-                                    {/* Task Label (Sticky Left) */}
-                                    <div className="sticky left-0 z-30 w-64 bg-slate-900/90 backdrop-blur-sm border-r border-white/10 h-full flex items-center px-4 shadow-[4px_0_10px_rgba(0,0,0,0.2)]">
-                                        <div className="truncate">
-                                            <p className="text-xs font-mono text-slate-400">{squawk.squawk_id.split('-').pop()}</p>
-                                            <p className="text-sm text-white truncate w-56" title={squawk.description}>{squawk.description}</p>
+                                <div key={squawk.squawk_id}
+                                    className={`relative flex items-center border-b border-white/5 hover:bg-white/3 transition-colors`}
+                                    style={{ height: ROW_H }}>
+
+                                    {/* ── Label ── */}
+                                    <div className="sticky left-0 z-10 flex-shrink-0 bg-slate-900/95 backdrop-blur border-r border-white/10 h-full flex flex-col justify-center px-3 gap-0.5"
+                                        style={{ width: LABEL_W }}>
+                                        <div className="flex items-center gap-1.5">
+                                            <span className="text-[10px] font-mono text-slate-600">#{idx + 1}</span>
+                                            <span className="text-xs text-slate-200 truncate max-w-[160px]" title={squawk.description}>
+                                                {squawk.description}
+                                            </span>
+                                        </div>
+                                        <div className="flex items-center gap-1.5 flex-wrap">
+                                            {/* Stage badge */}
+                                            <span className={`text-[9px] font-medium px-1.5 py-0.5 rounded border ${stageStyle}`}>
+                                                {squawk.stage ?? 'No stage'}
+                                            </span>
+                                            {/* Dependency blocked */}
+                                            {isDependencyBlocked && (
+                                                <Tooltip text={`Waiting on ${squawk.dependencies?.length ?? 0} predecessor task(s) to complete`}>
+                                                    <span className="text-[9px] px-1.5 py-0.5 rounded border bg-sky-500/10 text-sky-400 border-sky-500/20 flex items-center gap-0.5">
+                                                        <ClockIcon className="w-2.5 h-2.5" /> Blocked
+                                                    </span>
+                                                </Tooltip>
+                                            )}
+                                            {/* Parts shifted */}
+                                            {isShifted && (
+                                                <Tooltip text={shiftReasonParts.map(r =>
+                                                    `${r.partDescription} (${r.partNo}) — ${r.delayDays}d delay, ETA ${r.expectedDate}`
+                                                ).join(' · ')}>
+                                                    <span className="text-[9px] px-1.5 py-0.5 rounded border bg-amber-500/20 text-amber-300 border-amber-500/30 flex items-center gap-0.5 cursor-help">
+                                                        <ExclamationTriangleIcon className="w-2.5 h-2.5" /> SHIFTED
+                                                    </span>
+                                                </Tooltip>
+                                            )}
                                         </div>
                                     </div>
 
-                                    {/* Gantt Bar */}
-                                    <div 
-                                        className={`absolute h-8 rounded-md shadow-lg cursor-grab active:cursor-grabbing flex items-center px-2 overflow-hidden border ${colorClass} bg-opacity-80 backdrop-blur-sm group hover:brightness-110 transition-all duration-75`}
-                                        style={{ 
-                                            left: `${left}px`, // Add padding for sticky col
-                                            width: `${width}px`,
-                                            marginLeft: '256px' // Offset by sticky column width
-                                        }}
-                                        onMouseDown={(e) => handleMouseDown(e, squawk.squawk_id)}
-                                    >
-                                        <span className="text-xs font-bold text-white drop-shadow-md whitespace-nowrap overflow-hidden text-ellipsis">
-                                            {duration}h
-                                        </span>
-                                        
-                                        {/* Resize Handle (Visual Only for now) */}
-                                        <div className="absolute right-0 top-0 bottom-0 w-2 cursor-e-resize hover:bg-white/20"></div>
+                                    {/* ── Bar ── */}
+                                    <div
+                                        className={`absolute rounded-md border cursor-grab active:cursor-grabbing overflow-hidden shadow-lg
+                                                    group/bar transition-shadow hover:shadow-sky-500/20 ${barCol}`}
+                                        style={{ left: barLeft, width: barWidth, height: 34, top: '50%', transform: 'translateY(-50%)' }}
+                                        onMouseDown={e => onMouseDown(e, squawk.squawk_id, startHour)}>
+
+                                        {/* Progress fill */}
+                                        <div className="absolute inset-0 bg-white/20 origin-left transition-transform duration-500"
+                                            style={{ transform: `scaleX(${pct / 100})` }} />
+
+                                        {/* Label */}
+                                        <div className="relative z-10 h-full flex items-center justify-between px-2 gap-1">
+                                            <span className="text-[10px] font-semibold text-white drop-shadow truncate">
+                                                {squawk.description.length > 20
+                                                    ? squawk.description.slice(0, 18) + '…'
+                                                    : squawk.description}
+                                            </span>
+                                            <span className="text-[10px] text-white/70 flex-shrink-0">
+                                                {durationHours}h · {pct}%
+                                            </span>
+                                        </div>
+
+                                        {/* Resize nub */}
+                                        <div className="absolute right-0 top-0 bottom-0 w-2 cursor-e-resize hover:bg-white/20 rounded-r-md" />
                                     </div>
                                 </div>
                             );
@@ -188,10 +263,60 @@ export const SquawkGantt: React.FC<SquawkGanttProps> = ({ workOrder }) => {
                     </div>
                 </div>
             </div>
-            
-            <div className="p-3 border-t border-white/10 bg-slate-800 text-xs text-slate-400 flex justify-between items-center">
-                <span>Start: {workOrder.scheduled_date} 08:00</span>
-                <span>Drag bars to adjust task sequencing. This helps visualize critical path and resource overlaps.</span>
+
+            {/* ── Footer ── */}
+            <div className="flex-shrink-0 border-t border-white/10 bg-slate-800/80 px-4 py-3 space-y-2">
+                {/* % to Completion bar */}
+                <div className="flex items-center gap-3">
+                    <span className="text-[10px] font-mono text-slate-500 uppercase tracking-widest w-28 flex-shrink-0">
+                        % to Completion
+                    </span>
+                    <div className="flex-1 h-2 bg-white/5 rounded-full overflow-hidden">
+                        <div
+                            className={`h-full rounded-full transition-all duration-700 ${
+                                woCompletion === 100 ? 'bg-emerald-400'
+                                : woCompletion > 60  ? 'bg-sky-400'
+                                : woCompletion > 30  ? 'bg-amber-400'
+                                : 'bg-red-400'}`}
+                            style={{ width: `${woCompletion}%` }}
+                        />
+                    </div>
+                    <span className={`text-sm font-medium w-10 text-right flex-shrink-0 ${
+                        woCompletion === 100 ? 'text-emerald-400'
+                        : woCompletion > 60  ? 'text-sky-300'
+                        : woCompletion > 30  ? 'text-amber-300'
+                        : 'text-red-300'}`}>
+                        {woCompletion}%
+                    </span>
+                </div>
+
+                {/* Meta row */}
+                <div className="flex items-center justify-between text-xs text-slate-500">
+                    <div className="flex items-center gap-4">
+                        <span>Start: <span className="text-slate-400 font-mono">{workOrder.scheduled_date}</span></span>
+                        <span>Proj. end: <span className={`font-mono ${hasPartsDelays ? 'text-amber-400' : 'text-slate-400'}`}>{projectedEnd}</span></span>
+                        {hasPartsDelays && (
+                            <span className="text-amber-400 flex items-center gap-1">
+                                <ExclamationTriangleIcon className="w-3 h-3" />
+                                Parts delays extend timeline
+                            </span>
+                        )}
+                        {woCompletion === 100 && (
+                            <span className="text-emerald-400 flex items-center gap-1">
+                                <CheckBadgeIcon className="w-3 h-3" /> All tasks complete
+                            </span>
+                        )}
+                    </div>
+                    <div className="flex items-center gap-3">
+                        {Object.keys(dragOffsets).length > 0 && (
+                            <button onClick={resetOverrides}
+                                className="text-sky-400 hover:text-sky-300 underline text-xs">
+                                Reset manual overrides
+                            </button>
+                        )}
+                        <span>Drag bars to adjust sequencing</span>
+                    </div>
+                </div>
             </div>
         </div>
     );

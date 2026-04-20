@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Squawk, WorkOrder, RepairOrder, Aircraft, Technician, InventoryItem, Tool, Signature } from '../types.ts';
+import { Squawk, WorkOrder, RepairOrder, Aircraft, Technician, InventoryItem, Tool, Signature, SquawkStage } from '../types.ts';
 import {
     ClockIcon, CogIcon, UserGroupIcon, WrenchIcon, BeakerIcon, PencilIcon, PlusIcon,
     CheckBadgeIcon, LockClosedIcon, SparklesIcon, TrashIcon, ExclamationTriangleIcon,
@@ -204,6 +204,32 @@ export const SquawkDetailView: React.FC<SquawkDetailViewProps> = ({
             <div className="p-4 grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {/* ── Main content ── */}
                 <div className="lg:col-span-2 space-y-5">
+
+                    {/* Stage selector */}
+                    <div>
+                        <h5 className="font-mono text-xs text-slate-500 uppercase tracking-widest mb-2 flex items-center gap-2">
+                            <ClockIcon className="w-3 h-3" /> Stage
+                        </h5>
+                        <div className="flex flex-wrap gap-1.5">
+                            {(['Teardown','Inspection','Parts Pending','Reassembly','Testing','Complete'] as SquawkStage[]).map(stage => {
+                                const active = squawk.stage === stage;
+                                const styleMap: Record<SquawkStage, string> = {
+                                    'Teardown':      active ? 'bg-slate-500/40 text-slate-200 border-slate-400/50' : 'text-slate-500 border-white/10 hover:border-slate-400/30',
+                                    'Inspection':    active ? 'bg-sky-500/30    text-sky-200   border-sky-400/50'   : 'text-slate-500 border-white/10 hover:border-sky-400/30',
+                                    'Parts Pending': active ? 'bg-amber-500/30  text-amber-200 border-amber-400/50' : 'text-slate-500 border-white/10 hover:border-amber-400/30',
+                                    'Reassembly':    active ? 'bg-indigo-500/30 text-indigo-200 border-indigo-400/50' : 'text-slate-500 border-white/10 hover:border-indigo-400/30',
+                                    'Testing':       active ? 'bg-purple-500/30 text-purple-200 border-purple-400/50' : 'text-slate-500 border-white/10 hover:border-purple-400/30',
+                                    'Complete':      active ? 'bg-emerald-500/30 text-emerald-200 border-emerald-400/50' : 'text-slate-500 border-white/10 hover:border-emerald-400/30',
+                                };
+                                return (
+                                    <button key={stage} onClick={() => handleUpdateSquawk({ ...squawk, stage })}
+                                        className={`px-2.5 py-1 rounded-lg border text-xs font-medium transition-all ${styleMap[stage]}`}>
+                                        {stage}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
 
                     {/* Resolution Notes */}
                     <div>

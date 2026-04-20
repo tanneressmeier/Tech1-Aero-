@@ -62,10 +62,24 @@ export const MOCK_PARTS_INVENTORY: InventoryItem[] = [
         procurement_lead_time: 14,
         unit: 'EA',
         suppliers: [{ supplierName: 'Avionics Source', cost: 120.00 }],
-        certification: {
-            type: 'None',
-            verified: false
-        }
+        certification: { type: 'None', verified: false }
+    },
+    {
+        // BACKORDERED — expected_delivery_date set to demonstrate Gantt cascade
+        id: 'part-4',
+        part_no: 'HYD-5606-SEAL',
+        sku: 'HYD5606SEAL',
+        description: 'Main Gear Hydraulic Actuator Seal Kit',
+        qty_on_hand: 0,
+        qty_reserved: 1,
+        reorder_level: 2,
+        shelf_location: 'D-03-01',
+        storage_area: 'Hydraulics',
+        procurement_lead_time: 14,
+        unit: 'KIT',
+        suppliers: [{ supplierName: 'Parker Hannifin', cost: 320.00 }],
+        expected_delivery_date: new Date(Date.now() + 12 * 86_400_000).toISOString().split('T')[0],
+        certification: { type: 'EASA Form 1', verified: true, number: 'EASA-2025-0042' }
     }
 ];
 

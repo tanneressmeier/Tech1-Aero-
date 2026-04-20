@@ -12,6 +12,7 @@ import {
 } from './icons.tsx';
 import { compareToolsClientSide } from '../services/geminiService.ts';
 import { ProfitabilityPanel } from './ProfitabilityPanel.tsx';
+import { computeWoCompletion } from '../utils/ganttEngine.ts';
 
 interface WorkOrderDetailProps {
     order: WorkOrder;
@@ -133,6 +134,24 @@ export const WorkOrderDetail: React.FC<WorkOrderDetailProps> = ({
                     ))}
                 </div>
 
+                {/* ── % to Completion bar (Phase 3) ─────────────────────────── */}
+                {(() => {
+                    const pct = computeWoCompletion(order);
+                    return (
+                        <div className="mt-4 flex items-center gap-3">
+                            <span className="text-[10px] font-mono text-slate-500 uppercase tracking-widest w-28 flex-shrink-0">% Complete</span>
+                            <div className="flex-1 h-1.5 bg-white/5 rounded-full overflow-hidden">
+                                <div className={`h-full rounded-full transition-all duration-700 ${
+                                    pct === 100 ? 'bg-emerald-400' : pct > 60 ? 'bg-sky-400' : pct > 30 ? 'bg-amber-400' : 'bg-red-400'
+                                }`} style={{ width: `${pct}%` }} />
+                            </div>
+                            <span className={`text-sm font-medium w-10 text-right flex-shrink-0 ${
+                                pct === 100 ? 'text-emerald-400' : pct > 60 ? 'text-sky-300' : pct > 30 ? 'text-amber-300' : 'text-red-300'
+                            }`}>{pct}%</span>
+                        </div>
+                    );
+                })()}
+
                 {/* ── Tool Planning Summary (Phase 2) ─────────────────────── */}
                 {toolPlan.total > 0 && (
                     <div className="mt-5 pt-4 border-t border-white/5">
@@ -219,7 +238,7 @@ export const WorkOrderDetail: React.FC<WorkOrderDetailProps> = ({
                     <SquawkKanbanBoard squawks={order.squawks} technicians={technicians}
                         onUpdateStatus={handleKanbanStatusUpdate} onComplete={handleKanbanCompleteRequest} />
                 )}
-                {viewMode === 'gantt' && <SquawkGantt workOrder={order} />}
+                {viewMode === 'gantt' && <SquawkGantt workOrder={order} inventory={inventory} />}
             </div>
 
             <QuoteModal isOpen={isQuoteModalOpen} onClose={() => setIsQuoteModalOpen(false)}

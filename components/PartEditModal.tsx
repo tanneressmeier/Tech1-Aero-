@@ -130,6 +130,17 @@ export const PartEditModal: React.FC<PartEditModalProps> = ({ isOpen, onClose, p
                             <label htmlFor="storage_area" className="block text-sm font-medium text-slate-300">Storage Area</label>
                             <input type="text" name="storage_area" id="storage_area" value={formData.storage_area || ''} onChange={handleChange} className="mt-1 block w-full bg-slate-900 border border-slate-600 rounded-md shadow-sm py-2 px-3 text-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" />
                         </div>
+                        <div className="sm:col-span-3">
+                            <label htmlFor="expected_delivery_date" className="block text-sm font-medium text-slate-300">
+                                Expected Delivery Date
+                                <span className="ml-1 text-xs text-amber-400 font-normal">(set if on backorder — drives Gantt cascade)</span>
+                            </label>
+                            <input type="date" name="expected_delivery_date" id="expected_delivery_date"
+                                value={(formData as any).expected_delivery_date || ''}
+                                onChange={handleChange}
+                                className="mt-1 block w-full bg-slate-900 border border-slate-600 rounded-md shadow-sm py-2 px-3 text-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" />
+                            <p className="text-xs text-slate-500 mt-1">Leave blank if in stock. When set and qty available &lt; required, the Gantt chart will automatically shift dependent tasks to start after this date.</p>
+                        </div>
                     </div>
                 </div>
 
