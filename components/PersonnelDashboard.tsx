@@ -2,12 +2,13 @@
 // FIX: Implemented the PersonnelDashboard component to resolve module import errors.
 import React, { useState, useMemo } from 'react';
 import { Technician, TimeLog, WorkOrder, RepairOrder } from '../types.ts';
-import { UsersIcon, ClockIcon, UserPlusIcon, PencilIcon } from './icons.tsx';
+import { UsersIcon, ClockIcon, UserPlusIcon, PencilIcon, ExclamationTriangleIcon } from './icons.tsx';
 import { DashboardHeader } from './DashboardHeader.tsx';
 import { AddTechnicianModal } from './AddTechnicianModal.tsx';
 import { EditTechnicianModal } from './EditTechnicianModal.tsx';
 import { HoursChart } from './HoursChart.tsx';
 import { usePermissions } from '../hooks/usePermissions.ts';
+import { getTrainingExpiryWarnings } from '../utils/skillsEngine.ts';
 
 // Type definition for the hours chart
 export interface TechnicianHours {
@@ -71,6 +72,12 @@ export const PersonnelDashboard: React.FC<PersonnelDashboardProps> = ({
 
     }, [technicians, generalTimeLogs]);
 
+    // Training expiry warnings (60-day lookahead)
+    const trainingWarnings = useMemo(
+        () => getTrainingExpiryWarnings(technicians, 60),
+        [technicians]
+    );
+
     const handleEditClick = (tech: Technician) => {
         setEditingTechnician(tech);
     };
@@ -88,6 +95,33 @@ export const PersonnelDashboard: React.FC<PersonnelDashboardProps> = ({
                     </button>
                 )}
             </DashboardHeader>
+
+            {/* ── Training Expiry Warnings (Phase 2) ─────────────────────── */}
+            {trainingWarnings.length > 0 && (
+                <div className="bg-amber-500/8 border border-amber-500/25 rounded-xl p-4 space-y-2">
+                    <div className="flex items-center gap-2">
+                        <ExclamationTriangleIcon className="w-4 h-4 text-amber-400 flex-shrink-0" />
+                        <h3 className="text-sm font-semibold text-amber-300 uppercase tracking-wide">
+                            Training Expiry Alerts — {trainingWarnings.length} item{trainingWarnings.length !== 1 ? 's' : ''}
+                        </h3>
+                    </div>
+                    <div className="grid gap-1.5">
+                        {trainingWarnings.map((w, i) => (
+                            <div key={i} className="flex items-center justify-between px-3 py-2 rounded-lg bg-white/3 border border-white/5 text-sm">
+                                <div className="flex items-center gap-3">
+                                    <span className="font-medium text-slate-200">{w.techName}</span>
+                                    <span className="text-slate-400">{w.trainingName}</span>
+                                </div>
+                                <span className={`text-xs font-mono font-semibold ${w.isExpired ? 'text-red-400' : w.daysUntilExpiry <= 14 ? 'text-amber-300' : 'text-amber-400'}`}>
+                                    {w.isExpired
+                                        ? `Expired ${Math.abs(w.daysUntilExpiry)}d ago`
+                                        : `Expires in ${w.daysUntilExpiry}d`}
+                                </span>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
 
             <div>
                 <h3 className="text-lg font-light text-white uppercase tracking-wider mb-4">Technician Hours Analysis</h3>

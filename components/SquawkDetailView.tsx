@@ -251,6 +251,9 @@ export const SquawkDetailView: React.FC<SquawkDetailViewProps> = ({
                         </div>
                     </div>
 
+                    {/* Required Skills editor */}
+                    <SkillRequirementsEditor squawk={squawk} onUpdate={handleUpdateSquawk} />
+
                     {/* Resolution Notes */}
                     <div>
                         <h5 className="font-mono text-xs text-slate-500 uppercase tracking-widest mb-2 flex items-center gap-2">
@@ -567,6 +570,7 @@ export const SquawkDetailView: React.FC<SquawkDetailViewProps> = ({
                 onClose={() => setIsAssignTechPanelOpen(false)}
                 technicians={technicians}
                 assignedIds={squawk.assigned_technician_ids}
+                squawk={squawk}
                 onAssign={handleAssignTech}
                 onUnassign={handleUnassignTech}
             />
@@ -587,4 +591,137 @@ export const SquawkDetailView: React.FC<SquawkDetailViewProps> = ({
             />
         </div>
     );
+};
+
+// ── SkillRequirementsEditor ────────────────────────────────────────────────────
+// Inline chip editor for required_certifications and required_training on a squawk.
+// Leads/Admins set these; they gate technician assignment via AssignTechnicianModal.
+
+const COMMON_CERTS     = ['A&P', 'IA', 'Avionics', 'A&P + IA'];
+const COMMON_TRAININGS = [
+    'Fuel Cell Inspection', 'Composite Repair', 'RII Authorization',
+    'Hydraulic Systems', 'Glass Cockpit Upgrade', 'ADS-B Installation',
+    'NDT Level II', 'Oxygen Systems', 'Paint & Surface',
+];
+
+const SkillRequirementsEditor: React.FC<{
+    squawk:   Squawk;
+    onUpdate: (s: Squawk) => void;
+}> = ({ squawk, onUpdate }) => {
+    const [open, setOpen]       = React.useState(false);
+    const [newCert, setNewCert] = React.useState('');
+    const [newTrain, setNewTrain] = React.useState('');
+
+    const certs    = squawk.required_certifications ?? [];
+    const training = squawk.required_training       ?? [];
+    const hasAny   = certs.length > 0 || training.length > 0;
+
+    const removeCert  = (c: string) => onUpdate({ ...squawk, required_certifications: certs.filter(x => x !== c) });
+    const removeTrain = (t: string) => onUpdate({ ...squawk, required_training:       training.filter(x => x !== t) });
+
+    const addCert  = (c: string) => {
+        const v = c.trim();
+        if (!v || certs.includes(v)) return;
+        onUpdate({ ...squawk, required_certifications: [...certs, v] });
+        setNewCert('');
+    };
+    const addTrain = (t: string) => {
+        const v = t.trim();
+        if (!v || training.includes(v)) return;
+        onUpdate({ ...squawk, required_training: [...training, v] });
+        setNewTrain('');
+    };
+
+    return (
+        <div>
+            <button onClick={() => setOpen(p => !p)}
+                className="w-full flex items-center justify-between font-mono text-xs text-slate-500 uppercase tracking-widest hover:text-slate-300 transition-colors mb-1">
+                <span className="flex items-center gap-2">
+                    <LockClosedIcon className="w-3 h-3" />
+                    Required Skills
+                    {hasAny && (
+                        <span className="text-sky-400 font-medium normal-case tracking-normal">
+                            {certs.length + training.length} requirement{certs.length + training.length !== 1 ? 's' : ''} set
+                        </span>
+                    )}
+                </span>
+                <span className="text-slate-600">{open ? '▲' : '▼'}</span>
+            </button>
+
+            {!open && hasAny && (
+                <div className="flex flex-wrap gap-1 mb-1">
+                    {certs.map(c    => <span key={c} className="text-[10px] px-1.5 py-0.5 rounded border bg-sky-500/20 text-sky-200 border-sky-500/30">Cert: {c}</span>)}
+                    {training.map(t => <span key={t} className="text-[10px] px-1.5 py-0.5 rounded border bg-purple-500/20 text-purple-200 border-purple-500/30">Training: {t}</span>)}
+                </div>
+            )}
+
+            {open && (
+                <div className="mt-2 space-y-3 px-3 py-3 bg-white/3 border border-white/8 rounded-xl">
+                    {/* Certifications */}
+                    <div>
+                        <p className="text-[10px] font-mono text-slate-500 uppercase tracking-wider mb-1.5">Certifications required</p>
+                        <div className="flex flex-wrap gap-1.5 mb-2">
+                            {certs.map(c => (
+                                <span key={c} className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full border bg-sky-500/20 text-sky-200 border-sky-500/30">
+                                    {c}
+                                    <button onClick={() => removeCert(c)} className="text-sky-400 hover:text-red-400 ml-0.5 transition-colors">×</button>
+                                </span>
+                            ))}
+                            {certs.length === 0 && <span className="text-[10px] text-slate-600 italic">None</span>}
+                        </div>
+                        <div className="flex flex-wrap gap-1 mb-1.5">
+                            {COMMON_CERTS.filter(c => !certs.includes(c)).map(c => (
+                                <button key={c} onClick={() => addCert(c)}
+                                    className="text-[10px] px-2 py-0.5 rounded-full border border-white/10 text-slate-400 hover:border-sky-500/40 hover:text-sky-300 transition-colors">
+                                    + {c}
+                                </button>
+                            ))}
+                        </div>
+                        <div className="flex gap-1">
+                            <input value={newCert} onChange={e => setNewCert(e.target.value)}
+                                onKeyDown={e => e.key === 'Enter' && (addCert(newCert), e.preventDefault())}
+                                placeholder="Custom cert…"
+                                className="flex-1 bg-white/5 border border-white/10 rounded-lg px-2.5 py-1 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-sky-500" />
+                            <button onClick={() => addCert(newCert)}
+                                className="px-2.5 py-1 text-xs rounded-lg bg-sky-600/50 hover:bg-sky-600 text-white transition-colors">Add</button>
+                        </div>
+                    </div>
+
+                    {/* Training */}
+                    <div>
+                        <p className="text-[10px] font-mono text-slate-500 uppercase tracking-wider mb-1.5">Named training required</p>
+                        <div className="flex flex-wrap gap-1.5 mb-2">
+                            {training.map(t => (
+                                <span key={t} className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full border bg-purple-500/20 text-purple-200 border-purple-500/30">
+                                    {t}
+                                    <button onClick={() => removeTraining(t)} className="text-purple-400 hover:text-red-400 ml-0.5 transition-colors">×</button>
+                                </span>
+                            ))}
+                            {training.length === 0 && <span className="text-[10px] text-slate-600 italic">None</span>}
+                        </div>
+                        <div className="flex flex-wrap gap-1 mb-1.5">
+                            {COMMON_TRAININGS.filter(t => !training.includes(t)).map(t => (
+                                <button key={t} onClick={() => addTrain(t)}
+                                    className="text-[10px] px-2 py-0.5 rounded-full border border-white/10 text-slate-400 hover:border-purple-500/40 hover:text-purple-300 transition-colors">
+                                    + {t}
+                                </button>
+                            ))}
+                        </div>
+                        <div className="flex gap-1">
+                            <input value={newTrain} onChange={e => setNewTrain(e.target.value)}
+                                onKeyDown={e => e.key === 'Enter' && (addTrain(newTrain), e.preventDefault())}
+                                placeholder="Custom training…"
+                                className="flex-1 bg-white/5 border border-white/10 rounded-lg px-2.5 py-1 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-sky-500" />
+                            <button onClick={() => addTrain(newTrain)}
+                                className="px-2.5 py-1 text-xs rounded-lg bg-purple-600/50 hover:bg-purple-600 text-white transition-colors">Add</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+
+    function removeTraining(t: string) {
+        onUpdate({ ...squawk, required_training: training.filter(x => x !== t) });
+    }
 };

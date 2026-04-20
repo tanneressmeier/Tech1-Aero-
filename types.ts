@@ -46,12 +46,22 @@ export interface AppSettings {
     };
 }
 
+export interface TrainingRecord {
+    name:        string;   // e.g. "Fuel Cell Inspection", "Composite Repair", "RII Authorization"
+    completedDate: string; // ISO date
+    expiryDate?:  string;  // ISO date — if set, training expires
+    issuedBy?:   string;
+}
+
 export interface Technician {
-    id: string;
-    name: string;
+    id:             string;
+    name:           string;
     certifications: string[];
-    role: 'Admin' | 'Lead Technician' | 'Technician';
-    efficiency?: number;
+    role:           'Admin' | 'Lead Technician' | 'Technician';
+    efficiency?:    number;
+    // Phase 2 — Skill-Based Labor Tracking
+    vacation_dates?:   string[];        // ISO date strings (YYYY-MM-DD) tech is unavailable
+    training_records?: TrainingRecord[]; // named training completions with optional expiry
 }
 
 export interface LogbookEntry {
@@ -204,6 +214,9 @@ export interface Squawk {
     priority:                     'routine' | 'urgent' | 'aog';
     stage?:                       SquawkStage;        // Phase 3 — workflow stage
     dependencies?:                string[];           // Phase 3 — squawk_ids that must finish first
+    // Phase 2 — Skill-Based Labor Tracking
+    required_certifications?:     string[];           // e.g. ['A&P', 'IA'] — gates assignment & clock-in
+    required_training?:           string[];           // e.g. ['Fuel Cell', 'Composite Repair']
     time_logs:                    TimeLog[];
     category:                     string;
     rii_inspection_enabled:       boolean;

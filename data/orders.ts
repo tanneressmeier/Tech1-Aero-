@@ -16,13 +16,28 @@ const DESCRIPTIONS = [
 
 const generateSquawks = (count: number, prefix: string): Squawk[] => {
     const squawks: Squawk[] = [];
+
+    // Skill requirements keyed by description index (0-based)
+    const SKILL_MAP: Record<number, { certs?: string[]; training?: string[] }> = {
+        0: { certs: ['A&P'],       training: [] },                                        // landing gear
+        1: { certs: ['A&P'],       training: [] },                                        // flight controls
+        2: { certs: ['A&P'],       training: [] },                                        // oil change
+        3: { certs: ['A&P', 'IA'], training: ['Hydraulic Systems'] },                     // brake/hydraulic — needs IA sign-off
+        4: { certs: ['A&P'],       training: [] },                                        // pitot-static
+        5: { certs: ['A&P'],       training: ['Fuel Cell Inspection'] },                  // fuel injectors
+        6: { certs: ['A&P', 'Avionics'], training: ['Glass Cockpit Upgrade'] },           // avionics
+        7: { certs: ['A&P'],       training: ['Composite Repair'] },                      // corrosion/composites
+    };
+
     for (let i = 1; i <= count; i++) {
-        const isCompleted = i % 4 === 0;
+        const isCompleted  = i % 4 === 0;
         const isInProgress = i % 3 === 0 && !isCompleted;
+        const descIdx      = (i - 1) % DESCRIPTIONS.length;
+        const skills       = SKILL_MAP[descIdx] ?? {};
 
         squawks.push({
             squawk_id:   `${prefix}-sq-${i}`,
-            description: DESCRIPTIONS[(i - 1) % DESCRIPTIONS.length],
+            description: DESCRIPTIONS[descIdx],
             status:      isCompleted ? 'completed' : isInProgress ? 'in_progress' : 'open',
             priority:    i === 1 ? 'urgent' : 'routine',
             time_logs:   [],
@@ -45,13 +60,15 @@ const generateSquawks = (count: number, prefix: string): Squawk[] => {
             logbook_category_powerplant: i % 2 === 0,
             assigned_technician_ids: i <= 2 ? ['tech-2'] : [],
             used_tool_ids: [],
-            // Squawk 4 uses the backordered hydraulic seal kit — will cascade in Gantt
+            // Squawk 4 uses the backordered hydraulic seal kit — cascades in Gantt
             used_parts: i === 4 ? [{ inventory_item_id: 'part-4', quantity_used: 1 }] : [],
             resolution:  isCompleted ? 'Completed per maintenance manual.' : '',
             completion_percentage: isCompleted ? 100 : isInProgress ? Math.round((i / count) * 60) : 0,
             stage:       STAGE_SEQUENCE[Math.min(i - 1, STAGE_SEQUENCE.length - 1)],
-            // Chain: each squawk depends on the previous one (except the first)
             dependencies: i > 1 ? [`${prefix}-sq-${i - 1}`] : [],
+            // Skills gating — populated from SKILL_MAP by description type
+            required_certifications: skills.certs?.length ? skills.certs : undefined,
+            required_training:       skills.training?.length ? skills.training : undefined,
             signatures: {
                 work_complete:     null,
                 operational_check: null,

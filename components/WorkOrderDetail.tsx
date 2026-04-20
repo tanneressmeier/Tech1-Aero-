@@ -13,6 +13,7 @@ import {
 import { compareToolsClientSide } from '../services/geminiService.ts';
 import { ProfitabilityPanel } from './ProfitabilityPanel.tsx';
 import { computeWoCompletion } from '../utils/ganttEngine.ts';
+import { analyzeOrderBottlenecks } from '../utils/skillsEngine.ts';
 
 interface WorkOrderDetailProps {
     order: WorkOrder;
@@ -63,6 +64,12 @@ export const WorkOrderDetail: React.FC<WorkOrderDetailProps> = ({
             overdueList: overdueTools,
         };
     }, [order.squawks, tools]);
+
+    // ── Labor bottleneck analysis (Phase 2) ───────────────────────────────
+    const laborBottlenecks = useMemo(
+        () => analyzeOrderBottlenecks(order, technicians),
+        [order, technicians]
+    );
 
     const handleKanbanStatusUpdate = (squawkId: string, newStatus: Squawk['status']) => {
         onUpdateOrder({ ...order, squawks: order.squawks.map(s => s.squawk_id === squawkId ? { ...s, status: newStatus } : s) });
@@ -153,6 +160,35 @@ export const WorkOrderDetail: React.FC<WorkOrderDetailProps> = ({
                         </div>
                     );
                 })()}
+
+                {/* ── Labor Bottleneck Banner (Phase 2) ───────────────────── */}
+                {laborBottlenecks.length > 0 && (
+                    <div className="mt-5 pt-4 border-t border-white/5">
+                        <div className="flex items-start gap-2 px-3 py-2.5 bg-red-500/10 border border-red-500/25 rounded-xl">
+                            <ExclamationTriangleIcon className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
+                            <div className="min-w-0">
+                                <p className="text-xs font-semibold text-red-300 mb-1.5">
+                                    Labor Bottleneck — {laborBottlenecks.length} issue{laborBottlenecks.length !== 1 ? 's' : ''} detected
+                                </p>
+                                <div className="space-y-1">
+                                    {laborBottlenecks.map((b, i) => (
+                                        <div key={i} className="flex items-start gap-1.5 text-xs text-red-200/80">
+                                            <span className={`flex-shrink-0 text-[10px] px-1.5 py-0.5 rounded font-medium ${
+                                                b.type === 'vacation_conflict' ? 'bg-amber-500/20 text-amber-300' :
+                                                b.type === 'training_expired'  ? 'bg-orange-500/20 text-orange-300' :
+                                                'bg-red-500/20 text-red-300'
+                                            }`}>
+                                                {b.type === 'vacation_conflict' ? 'Vacation' :
+                                                 b.type === 'training_expired'  ? 'Expired' : 'Missing Skill'}
+                                            </span>
+                                            <span className="text-slate-300">{b.detail}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
 
                 {/* ── Tool Planning Summary (Phase 2) ─────────────────────── */}
                 {toolPlan.total > 0 && (

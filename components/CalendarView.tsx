@@ -5,6 +5,7 @@ import { CalendarEventModal } from './CalendarEventModal.tsx';
 import { ChevronLeftIcon, ChevronRightIcon, UserGroupIcon, PlaneIcon, ChartPieIcon, BuildingOfficeIcon } from './icons.tsx';
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend, PointElement, LineElement, LineController } from 'chart.js';
 import { Bar } from 'react-chartjs-2';
+import { getVacationDatesInRange } from '../utils/skillsEngine.ts';
 
 // Register Chart.js components
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend, PointElement, LineElement, LineController);
@@ -359,14 +360,29 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ workOrders, repairOr
                                 </div>
                                 <div className="flex-grow flex relative">
                                     {/* Grid Cells */}
-                                    {days.map((day, i) => (
-                                        <div 
-                                            key={i} 
-                                            className={`flex-1 border-r border-white/5 h-full transition-colors ${draggedEvent ? 'hover:bg-indigo-500/10' : ''}`}
-                                            onDragOver={handleDragOver}
-                                            onDrop={(e) => handleDrop(e, day, resource.id)}
-                                        ></div>
-                                    ))}
+                                    {days.map((day, i) => {
+                                        // In personnel mode shade vacation days grey
+                                        const isVacation = viewMode === 'personnel' && (() => {
+                                            const tech = technicians.find(t => t.id === resource.id);
+                                            if (!tech) return false;
+                                            const ds = day.toISOString().split('T')[0];
+                                            return (tech.vacation_dates ?? []).includes(ds);
+                                        })();
+                                        return (
+                                            <div
+                                                key={i}
+                                                className={`flex-1 border-r border-white/5 h-full transition-colors relative ${draggedEvent ? 'hover:bg-indigo-500/10' : ''} ${isVacation ? 'bg-slate-600/20' : ''}`}
+                                                onDragOver={handleDragOver}
+                                                onDrop={(e) => handleDrop(e, day, resource.id)}
+                                            >
+                                                {isVacation && (
+                                                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                                                        <span className="text-[9px] font-mono text-slate-500 uppercase tracking-widest rotate-[-30deg] select-none">PTO</span>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
 
                                     {/* Events Layer */}
                                     <div className="absolute inset-0 pointer-events-none">
@@ -413,13 +429,26 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ workOrders, repairOr
                                             const widthPercent = ((Math.min(eventEnd, viewEnd + dayMs) - Math.max(eventStart, viewStart)) / totalViewDuration) * 100;
 
                                             const statusColors: any = {
-                                                'Pending': 'bg-slate-500',
-                                                'In Progress': 'bg-sky-500',
-                                                'Completed': 'bg-emerald-500',
-                                                'On Hold': 'bg-amber-500',
-                                                'Cancelled': 'bg-red-500',
+                                                'Pending':    'bg-slate-500',
+                                                'In Progress':'bg-sky-500',
+                                                'Completed':  'bg-emerald-500',
+                                                'On Hold':    'bg-amber-500',
+                                                'Cancelled':  'bg-red-500',
                                             };
-                                            const colorClass = statusColors[order.status] || 'bg-slate-500';
+
+                                            // In personnel mode: flag if the tech is on vacation during this order
+                                            const hasVacationConflict = viewMode === 'personnel' && (() => {
+                                                const tech = technicians.find(t => t.id === resource.id);
+                                                if (!tech || !(tech.vacation_dates ?? []).length) return false;
+                                                const oStart = new Date(startDate); oStart.setHours(0,0,0,0);
+                                                const oEnd   = new Date(endDate);   oEnd.setHours(23,59,59,999);
+                                                const vacDates = getVacationDatesInRange(tech, oStart, oEnd);
+                                                return vacDates.length > 0;
+                                            })();
+
+                                            const colorClass = hasVacationConflict
+                                                ? 'bg-red-600 ring-2 ring-red-400 ring-offset-1 ring-offset-transparent'
+                                                : (statusColors[order.status] || 'bg-slate-500');
 
                                             return (
                                                 <div
@@ -430,13 +459,13 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ workOrders, repairOr
                                                     className={`absolute top-2 bottom-2 rounded-md ${colorClass} bg-opacity-90 border border-white/20 shadow-md hover:brightness-110 cursor-grab active:cursor-grabbing pointer-events-auto flex items-center px-2 overflow-hidden whitespace-nowrap z-10 transition-all`}
                                                     style={{
                                                         left: `${leftPercent}%`,
-                                                        width: `${Math.max(widthPercent, (100 / days.length))}%`, // Ensure at least 1 day width visibility roughly
+                                                        width: `${Math.max(widthPercent, (100 / days.length))}%`,
                                                         minWidth: '20px'
                                                     }}
-                                                    title={`${isWO ? order.wo_id : order.ro_id}: ${order.aircraft_tail_number} - ${isWO ? order.visit_name : order.description}`}
+                                                    title={`${isWO ? order.wo_id : order.ro_id}: ${order.aircraft_tail_number}${hasVacationConflict ? ' ⚠ VACATION CONFLICT' : ''}`}
                                                 >
                                                     <span className="text-xs font-bold text-white drop-shadow-md truncate">
-                                                        {order.aircraft_tail_number} | {isWO ? order.wo_id : order.ro_id}
+                                                        {hasVacationConflict && '⚠ '}{order.aircraft_tail_number} | {isWO ? order.wo_id : order.ro_id}
                                                     </span>
                                                 </div>
                                             );
