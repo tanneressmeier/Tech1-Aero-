@@ -12,6 +12,8 @@ import { AssignTechnicianModal } from './AssignTechnicianModal.tsx';
 import { SquawkAdminModal } from './SquawkAdminModal.tsx';
 import { SignatureConfirmationModal } from './SignatureConfirmationModal.tsx';
 import { TroubleshootingGuideModal } from './TroubleshootingGuideModal.tsx';
+import { SidePanel } from './SidePanel.tsx';
+import { StatusBadge, AlertBanner, ActionButton } from './ui.tsx';
 import { Permissions } from '../hooks/usePermissions.ts';
 import { predictToolsFromJob } from '../services/geminiService.ts';
 import { useToast } from '../contexts/ToastContext.tsx';
@@ -211,387 +213,410 @@ export const SquawkDetailView: React.FC<SquawkDetailViewProps> = ({
         );
     };
 
+    // ── Panel open state for progressive disclosure ─────────────────────────
+    const [isPanelOpen, setIsPanelOpen] = useState(false);
+
+    const orderId   = 'wo_id' in order ? order.wo_id : order.ro_id;
+    const pct       = squawk.status === 'completed' ? 100 : (squawk.completion_percentage ?? 0);
+    const hasIssues = assignedTools.some(t => t.calibrationRequired && ((t.calibrationDueDays ?? 999) < 0));
+
+    const STAGE_COLOURS: Record<string, string> = {
+        'Teardown':      'bg-slate-500/15 text-slate-300 border-slate-500/25',
+        'Inspection':    'bg-sky-500/15   text-sky-300   border-sky-500/25',
+        'Parts Pending': 'bg-amber-500/15 text-amber-300 border-amber-500/25',
+        'Reassembly':    'bg-indigo-500/15 text-indigo-300 border-indigo-500/25',
+        'Testing':       'bg-purple-500/15 text-purple-300 border-purple-500/25',
+        'Complete':      'bg-emerald-500/15 text-emerald-300 border-emerald-500/25',
+    };
+
     return (
-        <div className="glass-panel rounded-xl border border-white/5 overflow-hidden">
-            {/* Header */}
-            <div className="p-4 border-b border-white/5 bg-white/5 flex justify-between items-center gap-3">
-                <h4 className="font-medium text-white text-sm">{squawk.description}</h4>
-                <span className="flex-shrink-0 text-[10px] font-bold uppercase tracking-wider px-2 py-1 bg-white/10 text-white rounded border border-white/10">
-                    {squawk.status.replace('_', ' ')}
-                </span>
-            </div>
+        <>
+            {/* ── Compact summary card ── */}
+            <div className={`group rounded-xl border transition-all duration-150 ${
+                hasIssues
+                    ? 'bg-red-500/5 border-red-500/15 hover:border-red-500/30'
+                    : squawk.status === 'completed'
+                        ? 'bg-emerald-500/5 border-emerald-500/15'
+                        : 'bg-white/3 border-white/8 hover:border-white/15'
+            }`}>
+                <button
+                    className="w-full text-left px-4 py-3.5 flex items-center gap-4"
+                    onClick={() => setIsPanelOpen(true)}
+                >
+                    {/* Completion indicator */}
+                    <div className="relative flex-shrink-0 w-9 h-9">
+                        <svg className="w-9 h-9 -rotate-90" viewBox="0 0 36 36">
+                            <circle cx="18" cy="18" r="14" fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="3"/>
+                            <circle cx="18" cy="18" r="14" fill="none"
+                                stroke={pct === 100 ? '#34d399' : pct > 60 ? '#38bdf8' : pct > 30 ? '#fbbf24' : '#64748b'}
+                                strokeWidth="3"
+                                strokeDasharray={`${pct * 0.879} 87.9`}
+                                strokeLinecap="round"
+                            />
+                        </svg>
+                        <span className="absolute inset-0 flex items-center justify-center text-[9px] font-mono font-semibold text-slate-300">
+                            {pct}%
+                        </span>
+                    </div>
 
-            <div className="p-4 grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {/* ── Main content ── */}
-                <div className="lg:col-span-2 space-y-5">
-
-                    {/* Stage selector */}
-                    <div>
-                        <h5 className="font-mono text-xs text-slate-500 uppercase tracking-widest mb-2 flex items-center gap-2">
-                            <ClockIcon className="w-3 h-3" /> Stage
-                        </h5>
-                        <div className="flex flex-wrap gap-1.5">
-                            {(['Teardown','Inspection','Parts Pending','Reassembly','Testing','Complete'] as SquawkStage[]).map(stage => {
-                                const active = squawk.stage === stage;
-                                const styleMap: Record<SquawkStage, string> = {
-                                    'Teardown':      active ? 'bg-slate-500/40 text-slate-200 border-slate-400/50' : 'text-slate-500 border-white/10 hover:border-slate-400/30',
-                                    'Inspection':    active ? 'bg-sky-500/30    text-sky-200   border-sky-400/50'   : 'text-slate-500 border-white/10 hover:border-sky-400/30',
-                                    'Parts Pending': active ? 'bg-amber-500/30  text-amber-200 border-amber-400/50' : 'text-slate-500 border-white/10 hover:border-amber-400/30',
-                                    'Reassembly':    active ? 'bg-indigo-500/30 text-indigo-200 border-indigo-400/50' : 'text-slate-500 border-white/10 hover:border-indigo-400/30',
-                                    'Testing':       active ? 'bg-purple-500/30 text-purple-200 border-purple-400/50' : 'text-slate-500 border-white/10 hover:border-purple-400/30',
-                                    'Complete':      active ? 'bg-emerald-500/30 text-emerald-200 border-emerald-400/50' : 'text-slate-500 border-white/10 hover:border-emerald-400/30',
-                                };
-                                return (
-                                    <button key={stage} onClick={() => handleUpdateSquawk({ ...squawk, stage })}
-                                        className={`px-2.5 py-1 rounded-lg border text-xs font-medium transition-all ${styleMap[stage]}`}>
-                                        {stage}
-                                    </button>
-                                );
-                            })}
+                    {/* Description + meta */}
+                    <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                            <p className={`text-sm font-medium ${squawk.status === 'completed' ? 'text-slate-400 line-through' : 'text-white'}`}>
+                                {squawk.description}
+                            </p>
+                            {squawk.stage && (
+                                <span className={`text-[10px] px-1.5 py-0.5 rounded border font-medium ${STAGE_COLOURS[squawk.stage] ?? 'bg-white/5 text-slate-400 border-white/10'}`}>
+                                    {squawk.stage}
+                                </span>
+                            )}
+                        </div>
+                        <div className="flex items-center gap-3 mt-0.5 flex-wrap">
+                            <span className="text-xs text-slate-500">{squawk.hours_estimate}h est.</span>
+                            {assignedTechs.length > 0 && (
+                                <span className="text-xs text-slate-500">
+                                    {assignedTechs.map(t => t.name.split(' ')[0]).join(', ')}
+                                </span>
+                            )}
+                            {assignedTools.length > 0 && (
+                                <span className="text-xs text-slate-500">{assignedTools.length} tool{assignedTools.length > 1 ? 's' : ''}</span>
+                            )}
+                            {usedPartItems.length > 0 && (
+                                <span className="text-xs text-slate-500">{usedPartItems.length} part{usedPartItems.length > 1 ? 's' : ''}</span>
+                            )}
+                            {totalLoggedHours > 0 && (
+                                <span className="text-xs text-emerald-400 font-mono">{totalLoggedHours.toFixed(1)}h logged</span>
+                            )}
                         </div>
                     </div>
 
-                    {/* Required Skills editor */}
-                    <SkillRequirementsEditor squawk={squawk} onUpdate={handleUpdateSquawk} />
+                    {/* Right side: priority + status */}
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                        {squawk.priority !== 'routine' && (
+                            <span className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded border ${
+                                squawk.priority === 'aog' ? 'bg-red-500/15 text-red-300 border-red-500/25' : 'bg-amber-500/15 text-amber-300 border-amber-500/25'
+                            }`}>{squawk.priority}</span>
+                        )}
+                        <StatusBadge status={squawk.status.replace('_', ' ') as any} dot={false} />
+                        {hasIssues && <ExclamationTriangleIcon className="w-3.5 h-3.5 text-red-400 flex-shrink-0" />}
+                        <span className="text-slate-600 text-xs ml-1 group-hover:text-slate-400 transition-colors">→</span>
+                    </div>
+                </button>
 
-                    {/* Resolution Notes */}
+                {/* Active clock-in indicator */}
+                {(() => {
+                    const activeLog = (activeTimeLogs ?? []).find(
+                        l => l.technician_id === currentUser?.id &&
+                             l.squawk_id     === squawk.squawk_id &&
+                             !l.end_time
+                    );
+                    if (!activeLog) return null;
+                    return (
+                        <div className="px-4 pb-3 flex items-center gap-2">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse flex-shrink-0" />
+                            <span className="text-xs text-emerald-300">
+                                Clocked in since {new Date(activeLog.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                            <button
+                                onClick={() => {
+                                    onClockOutOfTask?.(activeLog.log_id, new Date().toISOString());
+                                    showToast({ message: 'Clocked out of task.', type: 'info' });
+                                }}
+                                className="ml-auto text-xs text-red-400 hover:text-red-300 border border-red-500/20 px-2 py-0.5 rounded transition-colors"
+                            >
+                                Clock Out
+                            </button>
+                        </div>
+                    );
+                })()}
+            </div>
+
+            {/* ── Full edit SidePanel ── */}
+            <SidePanel
+                isOpen={isPanelOpen}
+                onClose={() => setIsPanelOpen(false)}
+                title={squawk.description}
+                size="xl"
+                footer={
+                    <div className="flex justify-between items-center w-full">
+                        <button onClick={() => setIsPanelOpen(false)}
+                            className="text-sm text-slate-400 hover:text-white transition-colors">
+                            Close
+                        </button>
+                        <div className="flex items-center gap-2">
+                            {permissions.canEditBilling && (
+                                <ActionButton size="sm" variant="ghost"
+                                    onClick={() => setIsSquawkAdminModalOpen(true)}
+                                    icon={<CogIcon className="w-3.5 h-3.5" />}>
+                                    Admin
+                                </ActionButton>
+                            )}
+                            <ActionButton size="sm" variant="ghost"
+                                onClick={handleGenerateTroubleshootingGuide}
+                                icon={<SparklesIcon className="w-3.5 h-3.5" />}>
+                                AI Assist
+                            </ActionButton>
+                        </div>
+                    </div>
+                }
+            >
+                <div className="space-y-6">
+                    {/* Stage + completion */}
+                    <div className="space-y-4">
+                        {/* Stage */}
+                        <div>
+                            <p className="text-[10px] font-mono text-slate-500 uppercase tracking-wider mb-2">Stage</p>
+                            <div className="flex flex-wrap gap-1.5">
+                                {(['Teardown','Inspection','Parts Pending','Reassembly','Testing','Complete'] as SquawkStage[]).map(stage => {
+                                    const active = squawk.stage === stage;
+                                    return (
+                                        <button key={stage} onClick={() => handleUpdateSquawk({ ...squawk, stage })}
+                                            className={`px-2.5 py-1 rounded-lg border text-xs font-medium transition-all ${
+                                                active
+                                                    ? (STAGE_COLOURS[stage] ?? 'bg-white/10 text-white border-white/20')
+                                                    : 'text-slate-500 border-white/8 hover:border-white/15 hover:text-slate-300'
+                                            }`}>
+                                            {stage}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </div>
+
+                        {/* Completion slider */}
+                        {squawk.status !== 'completed' && (
+                            <div>
+                                <div className="flex items-center justify-between mb-1.5">
+                                    <p className="text-[10px] font-mono text-slate-500 uppercase tracking-wider">Completion</p>
+                                    <span className="text-xs font-mono font-semibold text-sky-300">{draftPct}%</span>
+                                </div>
+                                <input type="range" min={0} max={100} step={5}
+                                    value={draftPct}
+                                    onChange={e => setDraftPct(parseInt(e.target.value))}
+                                    onPointerUp={e => handleUpdateSquawk({ ...squawk, completion_percentage: parseInt((e.target as HTMLInputElement).value) })}
+                                    className="w-full accent-sky-500 cursor-pointer h-1.5"
+                                />
+                            </div>
+                        )}
+
+                        {/* Required Skills */}
+                        <SkillRequirementsEditor squawk={squawk} onUpdate={handleUpdateSquawk} />
+                    </div>
+
+                    {/* Resolution notes */}
                     <div>
-                        <h5 className="font-mono text-xs text-slate-500 uppercase tracking-widest mb-2 flex items-center gap-2">
-                            <PencilIcon className="w-3 h-3" /> Resolution Notes
-                        </h5>
+                        <p className="text-[10px] font-mono text-slate-500 uppercase tracking-wider mb-1.5">Resolution Notes</p>
                         <textarea
                             value={squawk.resolution}
                             onChange={e => handleUpdateSquawk({ ...squawk, resolution: e.target.value })}
                             rows={3}
-                            className="w-full bg-[#0B0F17]/50 border border-white/10 rounded-lg p-3 text-sm text-slate-300 focus:outline-none focus:ring-1 focus:ring-sky-500/50 resize-none"
+                            className="w-full bg-white/5 border border-white/10 rounded-lg p-3 text-sm text-slate-300 focus:outline-none focus:ring-1 focus:ring-sky-500/50 resize-none"
                             placeholder="Describe work performed…"
                         />
                     </div>
 
-                    {/* Completion percentage slider */}
-                    <div>
-                        <h5 className="font-mono text-xs text-slate-500 uppercase tracking-widest mb-2 flex items-center justify-between">
-                            <span className="flex items-center gap-2">
-                                <ChartBarIcon className="w-3 h-3" /> Task Completion
-                            </span>
-                            <span className={`font-mono text-sm font-semibold ${
-                                (squawk.completion_percentage ?? 0) === 100 ? 'text-emerald-400'
-                                : (squawk.completion_percentage ?? 0) >= 50 ? 'text-sky-400'
-                                : 'text-slate-400'
-                            }`}>
-                                {squawk.status === 'completed' ? '100' : (squawk.completion_percentage ?? 0)}%
-                            </span>
-                        </h5>
-                        {squawk.status !== 'completed' ? (
-                            <div className="space-y-1.5">
-                                <input
-                                    type="range"
-                                    min={0} max={100} step={5}
-                                    value={draftPct}
-                                    onChange={e => setDraftPct(parseInt(e.target.value))}
-                                    onPointerUp={e => {
-                                        const val = parseInt((e.target as HTMLInputElement).value);
-                                        handleUpdateSquawk({ ...squawk, completion_percentage: val });
-                                    }}
-                                    className="w-full accent-sky-500 cursor-pointer"
-                                />
-                                <div className="flex justify-between text-[10px] text-slate-600 font-mono">
-                                    <span>0%</span><span>25%</span><span>50%</span><span>75%</span><span>100%</span>
-                                </div>
-                            </div>
-                        ) : (
-                            <div className="h-1.5 bg-emerald-500/30 rounded-full overflow-hidden">
-                                <div className="h-full bg-emerald-400 w-full" />
-                            </div>
-                        )}
-                    </div>
-
-                    {/* 3-column resource grid */}
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-
-                        {/* Assigned Techs */}
-                        <div className="space-y-2">
-                            <h5 className="font-mono text-xs text-slate-500 uppercase tracking-widest flex items-center justify-between">
-                                <span className="flex items-center gap-2"><UserGroupIcon className="w-3 h-3" /> Assigned Techs</span>
+                    {/* 3-column resources */}
+                    <div className="grid grid-cols-1 gap-4">
+                        {/* Techs */}
+                        <div>
+                            <div className="flex items-center justify-between mb-2">
+                                <p className="text-[10px] font-mono text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+                                    <UserGroupIcon className="w-3 h-3" /> Assigned Techs
+                                </p>
                                 <button onClick={() => setIsAssignTechPanelOpen(true)}
                                     className="text-[10px] text-sky-400 hover:text-sky-300 flex items-center gap-0.5 transition-colors">
                                     <PlusIcon className="w-3 h-3" /> Assign
                                 </button>
-                            </h5>
-                            {assignedTechs.length === 0
-                                ? <p className="text-xs text-slate-600 italic">None assigned</p>
-                                : assignedTechs.map(tech => (
-                                    <div key={tech.id} className="flex items-center justify-between bg-white/5 rounded-lg px-2.5 py-1.5">
-                                        <div>
-                                            <p className="text-xs text-slate-200 font-medium">{tech.name}</p>
-                                            <p className="text-[10px] text-slate-500">{tech.role}</p>
-                                        </div>
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-[10px] text-sky-400 font-mono">{tech.certifications.join(', ')}</span>
-                                            <button onClick={() => handleUnassignTech(tech.id)}
-                                                className="text-slate-600 hover:text-red-400 transition-colors">
+                            </div>
+                            <div className="space-y-1.5">
+                                {assignedTechs.length === 0
+                                    ? <p className="text-xs text-slate-600 italic">None assigned</p>
+                                    : assignedTechs.map(tech => (
+                                        <div key={tech.id} className="flex items-center justify-between bg-white/3 rounded-lg px-2.5 py-1.5">
+                                            <div>
+                                                <p className="text-xs text-slate-200 font-medium">{tech.name}</p>
+                                                <p className="text-[10px] text-slate-500">{tech.certifications.join(', ')}</p>
+                                            </div>
+                                            <button onClick={() => handleUnassignTech(tech.id)} className="text-slate-600 hover:text-red-400 transition-colors">
                                                 <TrashIcon className="w-3 h-3" />
                                             </button>
                                         </div>
-                                    </div>
-                                ))
-                            }
+                                    ))
+                                }
+                            </div>
                         </div>
 
-                        {/* Used Tools */}
-                        <div className="space-y-2">
-                            <h5 className="font-mono text-xs text-slate-500 uppercase tracking-widest flex items-center justify-between">
-                                <span className="flex items-center gap-2"><WrenchIcon className="w-3 h-3" /> Used Tools</span>
-                                <button onClick={handleSuggestTools} disabled={isSuggestingTools}
-                                    title="AI: suggest tools from squawk description"
-                                    className="flex items-center gap-1 text-[10px] text-purple-400 hover:text-purple-300 disabled:opacity-40 transition-colors">
-                                    <SparklesIcon className="w-3 h-3" />
-                                    {isSuggestingTools ? 'Thinking…' : 'AI Suggest'}
-                                </button>
-                            </h5>
-                            {assignedTools.length === 0
-                                ? <p className="text-xs text-slate-600 italic">No tools logged</p>
-                                : assignedTools.map(tool => {
-                                    const isOverdue = tool.calibrationRequired &&
-                                        (tool.calibrationDueDays ?? (tool.calibrationDueDate
-                                            ? Math.round((new Date(tool.calibrationDueDate).getTime() - Date.now()) / 86400000)
-                                            : 999)) < 0;
-                                    return (
-                                        <div key={tool.id} className={`flex items-start justify-between rounded-lg px-2.5 py-1.5 ${isOverdue ? 'bg-red-500/10 border border-red-500/20' : 'bg-white/5'}`}>
-                                            <div className="min-w-0">
-                                                <p className="text-xs text-slate-200 font-medium truncate">{tool.name}</p>
-                                                <p className="text-[10px] text-slate-500 font-mono">
-                                                    {tool.id}
-                                                    <CalPill tool={tool} />
-                                                </p>
-                                                {isOverdue && (
-                                                    <p className="text-[10px] text-red-400 flex items-center gap-1 mt-0.5">
-                                                        <ExclamationTriangleIcon className="w-3 h-3" /> Cal overdue — verify before use
-                                                    </p>
-                                                )}
+                        {/* Tools */}
+                        <div>
+                            <div className="flex items-center justify-between mb-2">
+                                <p className="text-[10px] font-mono text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+                                    <WrenchIcon className="w-3 h-3" /> Tools
+                                </p>
+                                <div className="flex items-center gap-2">
+                                    <button onClick={handleSuggestTools} disabled={isSuggestingTools}
+                                        className="text-[10px] text-purple-400 hover:text-purple-300 flex items-center gap-0.5 transition-colors disabled:opacity-40">
+                                        <SparklesIcon className="w-3 h-3" /> {isSuggestingTools ? '…' : 'AI'}
+                                    </button>
+                                    <button onClick={() => setIsAssignToolPanelOpen(true)}
+                                        className="text-[10px] text-sky-400 hover:text-sky-300 flex items-center gap-0.5 transition-colors">
+                                        <PlusIcon className="w-3 h-3" /> Add
+                                    </button>
+                                </div>
+                            </div>
+                            <div className="space-y-1.5">
+                                {assignedTools.length === 0
+                                    ? <p className="text-xs text-slate-600 italic">No tools logged</p>
+                                    : assignedTools.map(tool => {
+                                        const overdue = tool.calibrationRequired &&
+                                            (tool.calibrationDueDays ?? (tool.calibrationDueDate
+                                                ? Math.round((new Date(tool.calibrationDueDate).getTime() - Date.now()) / 86400000)
+                                                : 999)) < 0;
+                                        return (
+                                            <div key={tool.id} className={`flex items-center justify-between rounded-lg px-2.5 py-1.5 ${overdue ? 'bg-red-500/8 border border-red-500/15' : 'bg-white/3'}`}>
+                                                <div>
+                                                    <p className="text-xs text-slate-200 font-medium">{tool.name}</p>
+                                                    {overdue && <p className="text-[10px] text-red-400">Cal overdue</p>}
+                                                </div>
+                                                <button onClick={() => handleRemoveTool(tool.id)} className="text-slate-600 hover:text-red-400 transition-colors">
+                                                    <TrashIcon className="w-3 h-3" />
+                                                </button>
                                             </div>
-                                            <button onClick={() => handleRemoveTool(tool.id)} className="ml-2 flex-shrink-0 text-slate-600 hover:text-red-400 transition-colors">
-                                                <TrashIcon className="w-3.5 h-3.5" />
+                                        );
+                                    })
+                                }
+                            </div>
+                        </div>
+
+                        {/* Parts */}
+                        <div>
+                            <div className="flex items-center justify-between mb-2">
+                                <p className="text-[10px] font-mono text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+                                    <BeakerIcon className="w-3 h-3" /> Parts
+                                </p>
+                                <button onClick={() => setIsAssignPartPanelOpen(true)}
+                                    className="text-[10px] text-sky-400 hover:text-sky-300 flex items-center gap-0.5 transition-colors">
+                                    <PlusIcon className="w-3 h-3" /> Add
+                                </button>
+                            </div>
+                            <div className="space-y-1.5">
+                                {usedPartItems.length === 0
+                                    ? <p className="text-xs text-slate-600 italic">No parts logged</p>
+                                    : usedPartItems.map(({ part, quantity, inventoryItemId }) => (
+                                        <div key={inventoryItemId} className="flex items-center justify-between bg-white/3 rounded-lg px-2.5 py-1.5">
+                                            <div>
+                                                <p className="text-xs text-slate-200 font-medium truncate max-w-[160px]">{part?.description ?? inventoryItemId}</p>
+                                                <p className="text-[10px] text-slate-500 font-mono">{part?.part_no ?? '—'} × {quantity}</p>
+                                            </div>
+                                            <button onClick={() => handleRemovePart(inventoryItemId)} className="text-slate-600 hover:text-red-400 transition-colors">
+                                                <TrashIcon className="w-3 h-3" />
                                             </button>
                                         </div>
-                                    );
-                                })
-                            }
-                            <button onClick={() => setIsAssignToolPanelOpen(true)}
-                                className="w-full flex items-center justify-center text-xs font-medium uppercase tracking-wider gap-1.5 bg-white/5 hover:bg-white/10 border border-white/10 p-2 rounded transition-colors">
-                                <PlusIcon className="w-3 h-3" /> Add Tool
-                            </button>
-                        </div>
-
-                        {/* Used Parts */}
-                        <div className="space-y-2">
-                            <h5 className="font-mono text-xs text-slate-500 uppercase tracking-widest flex items-center gap-2">
-                                <BeakerIcon className="w-3 h-3" /> Used Parts
-                            </h5>
-                            {usedPartItems.length === 0
-                                ? <p className="text-xs text-slate-600 italic">No parts logged</p>
-                                : usedPartItems.map(({ part, quantity, inventoryItemId }) => (
-                                    <div key={inventoryItemId} className="flex items-start justify-between bg-white/5 rounded-lg px-2.5 py-1.5">
-                                        <div className="min-w-0">
-                                            <p className="text-xs text-slate-200 font-medium truncate">{part?.description ?? inventoryItemId}</p>
-                                            <p className="text-[10px] text-slate-500 font-mono">
-                                                {part?.part_no ?? '—'} · qty {quantity}
-                                            </p>
-                                        </div>
-                                        <button onClick={() => handleRemovePart(inventoryItemId)} className="ml-2 flex-shrink-0 text-slate-600 hover:text-red-400 transition-colors">
-                                            <TrashIcon className="w-3.5 h-3.5" />
-                                        </button>
-                                    </div>
-                                ))
-                            }
-                            <button onClick={() => setIsAssignPartPanelOpen(true)}
-                                className="w-full flex items-center justify-center text-xs font-medium uppercase tracking-wider gap-1.5 bg-white/5 hover:bg-white/10 border border-white/10 p-2 rounded transition-colors">
-                                <PlusIcon className="w-3 h-3" /> Add Part
-                            </button>
+                                    ))
+                                }
+                            </div>
                         </div>
                     </div>
-                </div>
 
-                {/* ── Sidebar ── */}
-                <div className="space-y-5 pl-0 lg:pl-5 lg:border-l border-white/5">
-
-                    {/* ── Time Tracking ── */}
+                    {/* Time tracking */}
                     <div>
-                        <h5 className="font-mono text-xs text-slate-500 uppercase tracking-widest mb-2 flex items-center justify-between">
-                            <span className="flex items-center gap-2"><ClockIcon className="w-3 h-3" /> Time Tracking</span>
-                            <span className="text-sky-400 font-mono text-[10px]">{totalLoggedHours.toFixed(1)}h billable</span>
-                        </h5>
-
-                        {/* Task clock-in/out — only show if the current user is assigned to this squawk */}
+                        <div className="flex items-center justify-between mb-2">
+                            <p className="text-[10px] font-mono text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+                                <ClockIcon className="w-3 h-3" /> Time — {totalLoggedHours.toFixed(1)}h billable
+                            </p>
+                        </div>
+                        {/* Task clock in/out */}
                         {(() => {
-                            const isAssigned   = squawk.assigned_technician_ids.includes(currentUser?.id ?? '');
-                            const orderId      = 'wo_id' in order ? order.wo_id : order.ro_id;
-                            const orderType    = ('wo_id' in order ? 'WO' : 'RO') as 'WO' | 'RO';
-                            const activeLog    = (activeTimeLogs ?? []).find(
-                                l => l.technician_id === currentUser?.id &&
-                                     l.squawk_id     === squawk.squawk_id &&
-                                     !l.end_time
+                            const isAssigned = squawk.assigned_technician_ids.includes(currentUser?.id ?? '');
+                            const activeLog  = (activeTimeLogs ?? []).find(
+                                l => l.technician_id === currentUser?.id && l.squawk_id === squawk.squawk_id && !l.end_time
                             );
                             const isClockedIn = !!activeLog;
-
+                            const thisOrderId = 'wo_id' in order ? order.wo_id : order.ro_id;
+                            const orderType   = ('wo_id' in order ? 'WO' : 'RO') as 'WO' | 'RO';
                             return (
-                                <div className={`mb-3 px-3 py-2.5 rounded-xl border transition-all ${
-                                    isClockedIn
-                                        ? 'bg-emerald-500/10 border-emerald-500/30'
-                                        : 'bg-white/3 border-white/10'
-                                }`}>
+                                <div className={`mb-3 px-3 py-2.5 rounded-xl border ${isClockedIn ? 'bg-emerald-500/8 border-emerald-500/20' : 'bg-white/3 border-white/8'}`}>
                                     {isClockedIn ? (
-                                        <div className="space-y-1.5">
+                                        <div className="flex items-center justify-between gap-2">
                                             <div className="flex items-center gap-1.5">
-                                                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse flex-shrink-0" />
-                                                <span className="text-xs text-emerald-300 font-medium">Clocked in to task</span>
+                                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                                                <span className="text-xs text-emerald-300">Clocked in — {new Date(activeLog.start_time).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</span>
                                             </div>
-                                            <p className="text-[10px] text-slate-500 font-mono">
-                                                Since {new Date(activeLog.start_time).toLocaleTimeString()}
-                                            </p>
-                                            <button
-                                                onClick={() => {
-                                                    onClockOutOfTask?.(activeLog.log_id, new Date().toISOString());
-                                                    showToast({ message: 'Clocked out of task.', type: 'info' });
-                                                }}
-                                                className="w-full text-xs font-medium px-3 py-1.5 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-300 border border-red-500/30 transition-colors">
-                                                Clock Out of Task
+                                            <button onClick={() => { onClockOutOfTask?.(activeLog.log_id, new Date().toISOString()); showToast({ message: 'Clocked out.', type: 'info' }); }}
+                                                className="text-xs text-red-400 hover:text-red-300 border border-red-500/20 px-2 py-0.5 rounded transition-colors">
+                                                Clock Out
                                             </button>
                                         </div>
                                     ) : (
-                                        <div className="space-y-1.5">
-                                            <p className="text-[10px] text-slate-400">
-                                                {isAssigned
-                                                    ? 'You are assigned — clock in to charge billable time.'
-                                                    : 'Assign yourself to this task to clock in.'}
+                                        <div className="flex items-center justify-between gap-2">
+                                            <p className="text-[11px] text-slate-500">
+                                                {isAssigned ? 'Clock in to charge billable time' : 'Assign yourself to clock in'}
                                             </p>
-                                            <button
-                                                disabled={!isAssigned || squawk.status === 'completed'}
-                                                onClick={() => {
-                                                    onClockInToTask?.({
-                                                        technician_id: currentUser!.id,
-                                                        start_time:    new Date().toISOString(),
-                                                        is_billable:   true,
-                                                        squawk_id:     squawk.squawk_id,
-                                                        order_id:      orderId,
-                                                        order_type:    orderType,
-                                                    });
-                                                    showToast({ message: `Clocked in to: ${squawk.description}`, type: 'success' });
-                                                }}
-                                                className="w-full text-xs font-medium px-3 py-1.5 rounded-lg bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/30 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
-                                                Clock In to Task
+                                            <button disabled={!isAssigned || squawk.status === 'completed'}
+                                                onClick={() => { onClockInToTask?.({ technician_id: currentUser!.id, start_time: new Date().toISOString(), is_billable: true, squawk_id: squawk.squawk_id, order_id: thisOrderId, order_type: orderType }); showToast({ message: `Clocked in to task`, type: 'success' }); }}
+                                                className="text-xs text-sky-300 hover:text-sky-200 border border-sky-500/20 px-2 py-0.5 rounded disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
+                                                Clock In
                                             </button>
                                         </div>
                                     )}
                                 </div>
                             );
                         })()}
-
-                        {/* Past time logs list */}
-                        <div className="space-y-1 mb-2 max-h-40 overflow-y-auto">
+                        <div className="space-y-1 max-h-32 overflow-y-auto">
                             {squawk.time_logs.length === 0
                                 ? <p className="text-xs text-slate-600 italic">No time logged</p>
                                 : squawk.time_logs.map(log => {
                                     const tech = technicians.find(t => t.id === log.technician_id);
-                                    const hrs  = log.end_time
-                                        ? ((new Date(log.end_time).getTime() - new Date(log.start_time).getTime()) / 3_600_000).toFixed(2)
-                                        : '…';
+                                    const hrs  = log.end_time ? ((new Date(log.end_time).getTime() - new Date(log.start_time).getTime()) / 3600000).toFixed(2) : '…';
                                     return (
-                                        <div key={log.log_id} className="flex items-center justify-between bg-white/3 rounded-lg px-2.5 py-1.5">
-                                            <div>
-                                                <p className="text-xs text-slate-300">{tech?.name ?? 'Unknown'}</p>
-                                                <p className="text-[10px] text-slate-500 font-mono">
-                                                    {new Date(log.start_time).toLocaleDateString()}
-                                                    {log.is_billable
-                                                        ? <span className="ml-1.5 text-emerald-400">● billable</span>
-                                                        : <span className="ml-1.5 text-slate-600">○ non-billable</span>}
-                                                </p>
-                                            </div>
-                                            <span className="text-xs font-mono text-sky-400 flex-shrink-0">{hrs}h</span>
+                                        <div key={log.log_id} className="flex items-center justify-between text-xs py-1 border-b border-white/5 last:border-0">
+                                            <span className="text-slate-400">{tech?.name ?? 'Unknown'}</span>
+                                            <span className={`font-mono ${log.is_billable ? 'text-emerald-400' : 'text-slate-500'}`}>{hrs}h</span>
                                         </div>
                                     );
                                 })
                             }
                         </div>
-
-                        {/* Manual log button for admins / leads */}
                         {permissions.canEditBilling && (
                             <button onClick={() => setIsTimeLogPanelOpen(true)}
-                                className="w-full flex items-center justify-center text-xs font-medium uppercase tracking-wider gap-1.5 bg-white/5 hover:bg-white/10 border border-white/10 p-2 rounded-lg transition-colors">
-                                <PlusIcon className="w-3 h-3" /> Manual Log Entry
+                                className="mt-2 w-full text-xs text-slate-500 hover:text-slate-300 border border-white/8 hover:border-white/15 rounded-lg py-1.5 transition-colors">
+                                + Manual Log Entry
                             </button>
                         )}
                     </div>
 
                     {/* Signatures */}
                     <div>
-                        <h5 className="font-mono text-xs text-slate-500 uppercase tracking-widest mb-2 flex items-center gap-2">
-                            <LockClosedIcon className="w-3 h-3" /> Signatures
-                        </h5>
+                        <p className="text-[10px] font-mono text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                            <LockClosedIcon className="w-3 h-3" /> Sign-off
+                        </p>
                         <div className="grid grid-cols-2 gap-2">
                             <SignatureButton type="work_complete"     label="Work Complete" />
                             <SignatureButton type="operational_check" label="Op Check" />
                             <SignatureButton type="inspector"         label="Inspector"
                                 disabled={!permissions.canSignInspector}
-                                disabledReason="Requires Lead or Admin role" />
+                                disabledReason="Requires Lead or Admin" />
                             <SignatureButton type="return_to_service" label="Return to Svc"
                                 disabled={!permissions.canSignReturnToService}
-                                disabledReason="Requires IA Certification" />
-                        </div>
-                    </div>
-
-                    {/* Admin */}
-                    <div>
-                        <h5 className="font-mono text-xs text-slate-500 uppercase tracking-widest mb-2 flex items-center gap-2">
-                            <CogIcon className="w-3 h-3" /> Admin
-                        </h5>
-                        <div className="grid grid-cols-2 gap-2">
-                            {permissions.canEditBilling && (
-                                <button onClick={() => setIsSquawkAdminModalOpen(true)}
-                                    className="w-full text-xs font-medium uppercase tracking-wider bg-white/5 hover:bg-white/10 border border-white/10 p-2 rounded transition-colors">
-                                    Settings
-                                </button>
-                            )}
-                            <button onClick={handleGenerateTroubleshootingGuide}
-                                className="w-full text-xs font-medium uppercase tracking-wider bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 border border-purple-500/20 p-2 rounded flex items-center justify-center gap-1 transition-colors">
-                                <SparklesIcon className="w-3 h-3" /> AI Assist
-                            </button>
+                                disabledReason="Requires IA cert" />
                         </div>
                     </div>
                 </div>
-            </div>
+            </SidePanel>
 
             {/* Modals */}
             <TimeLogModal isOpen={isTimeLogPanelOpen} onClose={() => setIsTimeLogPanelOpen(false)} technicians={technicians} onLogTime={handleLogTime} currentUser={currentUser} />
             <AssignPartModal isOpen={isAssignPartPanelOpen} onClose={() => setIsAssignPartPanelOpen(false)} inventory={inventory} onAssignPart={handleAssignPart} />
             <AssignToolModal isOpen={isAssignToolPanelOpen} onClose={() => setIsAssignToolPanelOpen(false)} tools={tools} onAssignTool={handleAssignTool} />
-            <AssignTechnicianModal
-                isOpen={isAssignTechPanelOpen}
-                onClose={() => setIsAssignTechPanelOpen(false)}
-                technicians={technicians}
-                assignedIds={squawk.assigned_technician_ids}
-                squawk={squawk}
-                onAssign={handleAssignTech}
-                onUnassign={handleUnassignTech}
-            />
+            <AssignTechnicianModal isOpen={isAssignTechPanelOpen} onClose={() => setIsAssignTechPanelOpen(false)} technicians={technicians} assignedIds={squawk.assigned_technician_ids} squawk={squawk} onAssign={handleAssignTech} onUnassign={handleUnassignTech} />
             <SquawkAdminModal isOpen={isSquawkAdminModalOpen} onClose={() => setIsSquawkAdminModalOpen(false)} squawk={squawk} onSave={handleUpdateSquawk} />
             {isSignatureModalOpen && (
-                <SignatureConfirmationModal
-                    isOpen={!!isSignatureModalOpen}
-                    onClose={() => setIsSignatureModalOpen(null)}
-                    onConfirm={() => handleSign(isSignatureModalOpen)}
-                    signatureTypeLabel={isSignatureModalOpen.replace(/_/g, ' ')}
-                />
+                <SignatureConfirmationModal isOpen={!!isSignatureModalOpen} onClose={() => setIsSignatureModalOpen(null)} onConfirm={() => handleSign(isSignatureModalOpen)} signatureTypeLabel={isSignatureModalOpen.replace(/_/g, ' ')} />
             )}
-            <TroubleshootingGuideModal
-                isOpen={isTroubleshootingModalOpen}
-                onClose={() => setIsTroubleshootingModalOpen(false)}
-                isLoading={isTroubleshootingLoading}
-                guideContent={troubleshootingGuide}
-            />
-        </div>
+            <TroubleshootingGuideModal isOpen={isTroubleshootingModalOpen} onClose={() => setIsTroubleshootingModalOpen(false)} isLoading={isTroubleshootingLoading} guideContent={troubleshootingGuide} />
+        </>
     );
 };
+
 
 // ── SkillRequirementsEditor ────────────────────────────────────────────────────
 // Inline chip editor for required_certifications and required_training on a squawk.

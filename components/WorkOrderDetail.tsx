@@ -14,6 +14,7 @@ import { compareToolsClientSide } from '../services/geminiService.ts';
 import { ProfitabilityPanel } from './ProfitabilityPanel.tsx';
 import { computeWoCompletion } from '../utils/ganttEngine.ts';
 import { analyzeOrderBottlenecks } from '../utils/skillsEngine.ts';
+import { StatusBadge, PriorityBadge, MetaGrid, AlertBanner, TabBar, ActionButton } from './ui.tsx';
 
 interface WorkOrderDetailProps {
     order: WorkOrder;
@@ -91,178 +92,120 @@ export const WorkOrderDetail: React.FC<WorkOrderDetailProps> = ({
     };
 
     return (
-        <div className="flex flex-col h-full space-y-5">
-            <button onClick={onBack} className="text-sm font-medium text-slate-400 hover:text-white transition-colors w-fit flex items-center gap-1">
-                &larr; Back to Work Orders
-            </button>
-
-            {/* WO header */}
-            <div className="glass-panel rounded-xl p-6 border border-white/5 flex-shrink-0">
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-white/5 pb-5">
-                    <div>
-                        <h2 className="text-3xl font-light text-white tracking-wide">
-                            WO: <span className="font-mono font-normal">{order.wo_id}</span>
-                        </h2>
-                        <p className="text-slate-400 mt-1">{order.visit_name}</p>
-                    </div>
-                    <div className="flex items-center gap-2 flex-wrap">
-                        {/* View mode toggle */}
-                        <div className="bg-white/5 rounded-lg p-1 border border-white/10 flex items-center">
-                            {(['list','board','gantt'] as const).map(mode => (
-                                <button key={mode} onClick={() => setViewMode(mode)}
-                                    className={`px-3 py-1.5 text-sm font-medium rounded-md flex items-center gap-1.5 transition-all duration-200
-                                        ${viewMode === mode ? 'bg-indigo-500/20 text-white border border-indigo-500/30' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}>
-                                    {mode === 'list'  && <ClipboardListIcon className="w-4 h-4" />}
-                                    {mode === 'board' && <CircleStackIcon   className="w-4 h-4" />}
-                                    {mode === 'gantt' && <ChartBarIcon      className="w-4 h-4" />}
-                                    {mode.charAt(0).toUpperCase() + mode.slice(1)}
-                                </button>
-                            ))}
-                        </div>
-                        {permissions.canEditBilling && (
-                            <button onClick={() => setIsQuoteModalOpen(true)}
-                                className="flex items-center gap-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 font-medium py-2 px-4 rounded-lg text-sm transition-all">
-                                <CurrencyDollarIcon className="w-4 h-4" /> Generate Quote
-                            </button>
-                        )}
-                    </div>
+        <div className="flex flex-col h-full gap-5">
+            {/* ── Back + Title row ── */}
+            <div className="flex items-center justify-between flex-shrink-0">
+                <button onClick={onBack}
+                    className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-white transition-colors">
+                    ← Work Orders
+                </button>
+                <div className="flex items-center gap-2">
+                    {/* View toggle */}
+                    <TabBar size="sm"
+                        tabs={[
+                            { id: 'list',  label: 'List',  icon: <ClipboardListIcon className="w-3.5 h-3.5" /> },
+                            { id: 'board', label: 'Board', icon: <CircleStackIcon   className="w-3.5 h-3.5" /> },
+                            { id: 'gantt', label: 'Gantt', icon: <ChartBarIcon      className="w-3.5 h-3.5" /> },
+                        ]}
+                        active={viewMode}
+                        onChange={v => setViewMode(v as typeof viewMode)}
+                    />
+                    {permissions.canEditBilling && (
+                        <ActionButton
+                            size="sm"
+                            icon={<CurrencyDollarIcon className="w-3.5 h-3.5" />}
+                            onClick={() => setIsQuoteModalOpen(true)}
+                        >
+                            Quote
+                        </ActionButton>
+                    )}
                 </div>
-
-                {/* WO meta row */}
-                <div className="mt-5 grid grid-cols-2 md:grid-cols-4 gap-6 text-sm">
-                    {[
-                        { label: 'Aircraft',  value: order.aircraft_tail_number },
-                        { label: 'Scheduled', value: new Date(order.scheduled_date).toLocaleDateString() },
-                        { label: 'Status',    value: order.status },
-                        { label: 'Priority',  value: order.priority.toUpperCase() },
-                    ].map(({ label, value }) => (
-                        <div key={label}>
-                            <p className="text-xs font-mono text-slate-500 uppercase tracking-widest mb-1">{label}</p>
-                            <p className="text-xl font-light text-white">{value}</p>
-                        </div>
-                    ))}
-                </div>
-
-                {/* ── % to Completion bar (Phase 3) ─────────────────────────── */}
-                {(() => {
-                    const pct = computeWoCompletion(order);
-                    return (
-                        <div className="mt-4 flex items-center gap-3">
-                            <span className="text-[10px] font-mono text-slate-500 uppercase tracking-widest w-28 flex-shrink-0">% Complete</span>
-                            <div className="flex-1 h-1.5 bg-white/5 rounded-full overflow-hidden">
-                                <div className={`h-full rounded-full transition-all duration-700 ${
-                                    pct === 100 ? 'bg-emerald-400' : pct > 60 ? 'bg-sky-400' : pct > 30 ? 'bg-amber-400' : 'bg-red-400'
-                                }`} style={{ width: `${pct}%` }} />
-                            </div>
-                            <span className={`text-sm font-medium w-10 text-right flex-shrink-0 ${
-                                pct === 100 ? 'text-emerald-400' : pct > 60 ? 'text-sky-300' : pct > 30 ? 'text-amber-300' : 'text-red-300'
-                            }`}>{pct}%</span>
-                        </div>
-                    );
-                })()}
-
-                {/* ── Labor Bottleneck Banner (Phase 2) ───────────────────── */}
-                {laborBottlenecks.length > 0 && (
-                    <div className="mt-5 pt-4 border-t border-white/5">
-                        <div className="flex items-start gap-2 px-3 py-2.5 bg-red-500/10 border border-red-500/25 rounded-xl">
-                            <ExclamationTriangleIcon className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
-                            <div className="min-w-0">
-                                <p className="text-xs font-semibold text-red-300 mb-1.5">
-                                    Labor Bottleneck — {laborBottlenecks.length} issue{laborBottlenecks.length !== 1 ? 's' : ''} detected
-                                </p>
-                                <div className="space-y-1">
-                                    {laborBottlenecks.map((b, i) => (
-                                        <div key={i} className="flex items-start gap-1.5 text-xs text-red-200/80">
-                                            <span className={`flex-shrink-0 text-[10px] px-1.5 py-0.5 rounded font-medium ${
-                                                b.type === 'vacation_conflict' ? 'bg-amber-500/20 text-amber-300' :
-                                                b.type === 'training_expired'  ? 'bg-orange-500/20 text-orange-300' :
-                                                'bg-red-500/20 text-red-300'
-                                            }`}>
-                                                {b.type === 'vacation_conflict' ? 'Vacation' :
-                                                 b.type === 'training_expired'  ? 'Expired' : 'Missing Skill'}
-                                            </span>
-                                            <span className="text-slate-300">{b.detail}</span>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                )}
-
-                {/* ── Tool Planning Summary (Phase 2) ─────────────────────── */}
-                {toolPlan.total > 0 && (
-                    <div className="mt-5 pt-4 border-t border-white/5">
-                        <button onClick={() => setShowToolPlan(p => !p)}
-                            className="w-full flex items-center justify-between text-sm text-slate-300 hover:text-white transition-colors">
-                            <span className="flex items-center gap-2 font-mono text-xs uppercase tracking-widest text-slate-500">
-                                <WrenchIcon className="w-3.5 h-3.5" />
-                                Tool Planning Summary — {toolPlan.total} tool{toolPlan.total !== 1 ? 's' : ''} required
-                            </span>
-                            <div className="flex items-center gap-3">
-                                {toolPlan.overdue > 0 && (
-                                    <span className="flex items-center gap-1 text-xs text-red-400">
-                                        <ExclamationTriangleIcon className="w-3.5 h-3.5" />
-                                        {toolPlan.overdue} cal overdue
-                                    </span>
-                                )}
-                                {toolPlan.shortage > 0 && (
-                                    <span className="text-xs text-amber-400">{toolPlan.shortage} not in inventory</span>
-                                )}
-                                {toolPlan.shortage === 0 && toolPlan.overdue === 0 && (
-                                    <span className="flex items-center gap-1 text-xs text-emerald-400">
-                                        <CheckBadgeIcon className="w-3.5 h-3.5" /> All tools available
-                                    </span>
-                                )}
-                                <span className="text-slate-500 text-xs">{showToolPlan ? '▲' : '▼'}</span>
-                            </div>
-                        </button>
-
-                        {showToolPlan && (
-                            <div className="mt-3 grid gap-1.5 max-h-48 overflow-y-auto">
-                                {toolPlan.details.map(tool => {
-                                    const days = tool.calibrationDueDays ?? (tool.calibrationDueDate
-                                        ? Math.round((new Date(tool.calibrationDueDate).getTime() - Date.now()) / 86400000)
-                                        : undefined);
-                                    const isOverdue  = tool.calibrationRequired && days !== undefined && days < 0;
-                                    const isDueSoon  = tool.calibrationRequired && days !== undefined && days >= 0 && days < 30;
-
-                                    return (
-                                        <div key={tool.id}
-                                            className={`flex items-center justify-between px-3 py-2 rounded-lg text-sm
-                                                ${isOverdue  ? 'bg-red-500/10 border border-red-500/20'
-                                                : isDueSoon  ? 'bg-amber-500/10 border border-amber-500/20'
-                                                : 'bg-white/3 border border-white/5'}`}>
-                                            <div>
-                                                <span className="text-slate-200">{tool.name}</span>
-                                                <span className="text-slate-500 text-xs font-mono ml-2">{tool.id}</span>
-                                            </div>
-                                            <div className="text-xs">
-                                                {isOverdue  && <span className="text-red-400 font-semibold">Cal overdue {Math.abs(days!)}d</span>}
-                                                {isDueSoon  && <span className="text-amber-400">Cal due {days}d</span>}
-                                                {!isOverdue && !isDueSoon && tool.calibrationRequired && <span className="text-emerald-400">Cal OK</span>}
-                                                {!tool.calibrationRequired && <span className="text-slate-600">No cal required</span>}
-                                            </div>
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                        )}
-                    </div>
-                )}
-
-                {/* ── Quote Baseline (editable — feeds ProfitabilityPanel) ── */}
-                <QuoteBaselineEditor order={order} onUpdate={onUpdateOrder} />
-
-                {/* ── Profitability Panel (Phase 3 Area 4) ─────────────── */}
-                <ProfitabilityPanel order={order} inventory={inventory} />
             </div>
 
-            {/* Squawk views */}
+            {/* ── Order header card ── */}
+            <div className="bg-white/3 border border-white/8 rounded-xl p-5 flex-shrink-0 space-y-4">
+                {/* Title + status row */}
+                <div className="flex items-start justify-between gap-4">
+                    <div>
+                        <div className="flex items-center gap-2.5 flex-wrap">
+                            <h2 className="text-xl font-semibold text-white">{order.wo_id}</h2>
+                            <PriorityBadge priority={order.priority as any} />
+                            <StatusBadge   status={order.status as any} />
+                        </div>
+                        <p className="text-sm text-slate-400 mt-0.5">{order.visit_name}</p>
+                    </div>
+
+                    {/* Completion bar */}
+                    {(() => {
+                        const pct = computeWoCompletion(order);
+                        return (
+                            <div className="flex items-center gap-2.5 flex-shrink-0 min-w-[160px]">
+                                <div className="flex-1 h-1.5 bg-white/5 rounded-full overflow-hidden">
+                                    <div className={`h-full rounded-full transition-all duration-700 ${
+                                        pct === 100 ? 'bg-emerald-400' : pct > 60 ? 'bg-sky-400' : pct > 30 ? 'bg-amber-400' : 'bg-slate-600'
+                                    }`} style={{ width: `${pct}%` }} />
+                                </div>
+                                <span className={`text-xs font-mono font-semibold flex-shrink-0 ${
+                                    pct === 100 ? 'text-emerald-400' : pct > 60 ? 'text-sky-300' : pct > 30 ? 'text-amber-300' : 'text-slate-500'
+                                }`}>{pct}%</span>
+                            </div>
+                        );
+                    })()}
+                </div>
+
+                {/* Meta grid */}
+                <MetaGrid items={[
+                    { label: 'Aircraft',   value: order.aircraft_tail_number, accent: true },
+                    { label: 'Scheduled',  value: new Date(order.scheduled_date).toLocaleDateString() },
+                    { label: 'Make/Model', value: `${aircraft.make} ${aircraft.model}` },
+                    { label: 'Tasks',      value: `${order.squawks.filter(s => s.status === 'completed').length} / ${order.squawks.length} complete` },
+                ]} cols={4} />
+
+                {/* Consolidated alert row — labor + tools, all warnings in one place */}
+                {(laborBottlenecks.length > 0 || toolPlan.overdue > 0 || toolPlan.shortage > 0) && (
+                    <div className="space-y-2 pt-1">
+                        {laborBottlenecks.length > 0 && (
+                            <AlertBanner severity="warning"
+                                title={`${laborBottlenecks.length} labor issue${laborBottlenecks.length > 1 ? 's' : ''} — ${laborBottlenecks[0].detail}`}
+                                compact>
+                                {laborBottlenecks.length > 1 && laborBottlenecks.slice(1).map((b, i) => (
+                                    <p key={i} className="text-xs text-amber-200/60">{b.detail}</p>
+                                ))}
+                            </AlertBanner>
+                        )}
+                        {(toolPlan.overdue > 0 || toolPlan.shortage > 0) && (
+                            <AlertBanner severity={toolPlan.overdue > 0 ? 'critical' : 'warning'}
+                                title={[
+                                    toolPlan.overdue  > 0 && `${toolPlan.overdue} tool${toolPlan.overdue > 1 ? 's' : ''} cal overdue`,
+                                    toolPlan.shortage > 0 && `${toolPlan.shortage} tool${toolPlan.shortage > 1 ? 's' : ''} not in inventory`,
+                                ].filter(Boolean).join(' · ')}
+                                compact
+                            />
+                        )}
+                    </div>
+                )}
+
+                {/* Admin-only financial details — collapsed by default */}
+                {permissions.canEditBilling && (
+                    <div className="pt-2 border-t border-white/5 space-y-2">
+                        <QuoteBaselineEditor order={order} onUpdate={onUpdateOrder} />
+                        <ProfitabilityPanel  order={order} inventory={inventory} />
+                    </div>
+                )}
+            </div>
+
+                        {/* Squawk views */}
             <div className="flex-1 min-h-0">
                 {viewMode === 'list' && (
-                    <div className="space-y-4 pb-10">
-                        <h3 className="text-lg font-light text-white uppercase tracking-wider">Tasks / Squawks</h3>
+                    <div className="space-y-3 pb-10">
+                        <div className="flex items-center justify-between">
+                            <p className="text-xs font-mono text-slate-500 uppercase tracking-widest">
+                                {order.squawks.length} task{order.squawks.length !== 1 ? 's' : ''}
+                            </p>
+                            <p className="text-xs text-slate-600">
+                                {order.squawks.filter(s => s.status === 'completed').length} complete
+                            </p>
+                        </div>
                         {order.squawks.map(squawk => (
                             <SquawkDetailView key={squawk.squawk_id}
                                 squawk={squawk} order={order} aircraft={aircraft}

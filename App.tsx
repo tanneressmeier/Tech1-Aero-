@@ -59,21 +59,42 @@ import {
 type DetailedView = 'work_order_detail' | 'repair_order_detail';
 type CurrentView = View | DetailedView;
 
-const navItems: { view: View; label: string; icon: React.FC<any>; adminOnly?: boolean }[] = [
-    { view: 'mission_control', label: 'Mission Control', icon: HomeIcon },
-    { view: 'aircraft', label: 'Fleet Status', icon: PlaneIcon },
-    { view: 'work_orders', label: 'Work Orders', icon: ClipboardListIcon },
-    { view: 'repair_orders', label: 'Repair Orders', icon: WrenchScrewdriverIcon },
-    { view: 'calendar', label: 'Schedule', icon: CalendarIcon },
-    { view: 'tooling', label: 'Precision Tooling', icon: WrenchIcon },
-    { view: 'inventory', label: 'Parts Inventory', icon: CogIcon },
-    { view: 'consumables', label: 'Consumables', icon: BeakerIcon },
-    { view: 'personnel', label: 'Personnel', icon: UsersIcon, adminOnly: true },
-    { view: 'analytics', label: 'Analytics', icon: ChartPieIcon, adminOnly: true },
-    { view: 'profitability', label: 'Profitability', icon: CurrencyDollarIcon, adminOnly: true },
-    { view: 'purchase_orders', label: 'Procurement', icon: ShoppingCartIcon },
-    { view: 'data_migration', label: 'Data Migration', icon: CircleStackIcon, adminOnly: true },
+// Nav grouped by function — reduces 13 flat items to 3 logical groups
+type NavItem = { view: View; label: string; icon: React.FC<any>; adminOnly?: boolean };
+type NavGroup = { label: string; items: NavItem[] };
+
+const NAV_GROUPS: NavGroup[] = [
+    {
+        label: 'Operations',
+        items: [
+            { view: 'mission_control', label: 'Dashboard',    icon: HomeIcon },
+            { view: 'work_orders',    label: 'Work Orders',  icon: ClipboardListIcon },
+            { view: 'repair_orders',  label: 'Repair Orders',icon: WrenchScrewdriverIcon },
+            { view: 'calendar',       label: 'Schedule',     icon: CalendarIcon },
+        ],
+    },
+    {
+        label: 'Resources',
+        items: [
+            { view: 'aircraft',        label: 'Fleet',       icon: PlaneIcon },
+            { view: 'tooling',         label: 'Tooling',     icon: WrenchIcon },
+            { view: 'inventory',       label: 'Parts',       icon: CogIcon },
+            { view: 'consumables',     label: 'Consumables', icon: BeakerIcon },
+            { view: 'purchase_orders', label: 'Procurement', icon: ShoppingCartIcon },
+        ],
+    },
+    {
+        label: 'Management',
+        items: [
+            { view: 'personnel',       label: 'Personnel',     icon: UsersIcon,          adminOnly: true },
+            { view: 'profitability',   label: 'Profitability', icon: CurrencyDollarIcon, adminOnly: true },
+            { view: 'analytics',       label: 'Analytics',     icon: ChartPieIcon,       adminOnly: true },
+        ],
+    },
 ];
+
+// Flat list kept for legacy compatibility (active view detection etc.)
+const navItems = NAV_GROUPS.flatMap(g => g.items);
 
 const App: React.FC = () => {
     const [state, dispatch] = useReducer(appReducer, initialState);
@@ -571,113 +592,111 @@ const App: React.FC = () => {
         return <LoginScreen technicians={state.technicians} onLogin={handleLogin} />;
     }
 
-    const visibleNavItems = navItems.filter(item => !item.adminOnly || permissions.canViewAdminDashboards);
-
-    const getAccentColorClass = (color: string) => {
-        switch(color) {
-            case 'indigo': return 'text-indigo-400 border-indigo-400';
-            case 'emerald': return 'text-emerald-400 border-emerald-400';
-            case 'amber': return 'text-amber-400 border-amber-400';
-            case 'rose': return 'text-rose-400 border-rose-400';
-            default: return 'text-sky-400 border-sky-400';
-        }
-    };
-
-    const getAccentBgClass = (color: string) => {
-        switch(color) {
-            case 'indigo': return 'from-indigo-500/20';
-            case 'emerald': return 'from-emerald-500/20';
-            case 'amber': return 'from-amber-500/20';
-            case 'rose': return 'from-rose-500/20';
-            default: return 'from-sky-500/20';
-        }
-    };
+    const visibleGroups = NAV_GROUPS.map(g => ({
+        ...g,
+        items: g.items.filter(item => !item.adminOnly || permissions.canViewAdminDashboards),
+    })).filter(g => g.items.length > 0);
 
     return (
-        <div className={`flex h-screen bg-slate-50 dark:bg-[#0B0F17] text-slate-800 dark:text-slate-200 font-sans overflow-hidden transition-colors duration-300 ${settings.appearance.density === 'Compact' ? 'text-sm' : ''}`}>
-            {/* Sidebar */}
-            <aside className="w-72 glass-panel flex-shrink-0 flex flex-col z-20 m-4 rounded-2xl shadow-2xl">
-                <div className="h-24 flex items-center px-8 border-b border-slate-200 dark:border-white/5">
-                     <WrenchIcon className={`w-8 h-8 ${getAccentColorClass(settings.appearance.accentColor).split(' ')[0]}`} />
-                     <div className="ml-3">
-                        <span className="block text-xl font-light tracking-widest text-slate-900 dark:text-white uppercase truncate w-40" title={settings.organization.name}>
-                            {settings.organization.name.split(' ')[0]}
-                        </span>
-                        <span className={`block text-xs font-medium tracking-[0.2em] uppercase ${getAccentColorClass(settings.appearance.accentColor).split(' ')[0]}`}>
-                            {settings.organization.name.split(' ').slice(1).join(' ') || 'Aero'}
-                        </span>
-                     </div>
-                </div>
-                <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
-                    {visibleNavItems.map(item => {
-                        const isActive = currentView === item.view;
-                        const activeColorClass = getAccentColorClass(settings.appearance.accentColor);
-                        const activeBgClass = getAccentBgClass(settings.appearance.accentColor);
+        <div className={`flex h-screen bg-[#080c14] text-slate-200 font-sans overflow-hidden ${settings.appearance.density === 'Compact' ? 'text-sm' : ''}`}>
+            {/* ── Sidebar ── */}
+            <aside className="w-56 flex-shrink-0 flex flex-col bg-[#0d1220] border-r border-white/5 z-20">
 
-                        return (
-                            <a 
-                                key={item.view} 
-                                href="#" 
-                                onClick={(e) => { e.preventDefault(); handleNavigate({ view: item.view }); }} 
-                                className={`group flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-all duration-300 ease-out ${
-                                    isActive
-                                    ? `bg-gradient-to-r ${activeBgClass} to-transparent text-slate-800 dark:text-white border-l-2 ${activeColorClass.split(' ')[1]} shadow-sm` 
-                                    : 'text-slate-500 dark:text-slate-400 hover:bg-slate-200/50 dark:hover:bg-white/5 hover:text-slate-900 dark:hover:text-white border-l-2 border-transparent'
-                                }`}
-                            >
-                                <item.icon className={`w-5 h-5 mr-3 transition-colors duration-300 ${isActive ? activeColorClass.split(' ')[0] : 'text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300'}`} />
-                                {item.label}
-                            </a>
-                        );
-                    })}
-                </nav>
-                 <div className="p-6 border-t border-slate-200 dark:border-white/5">
-                    <div className="flex items-center gap-3">
-                        <div className="relative">
-                            <UserCircleIcon className="w-10 h-10 text-slate-400"/>
-                            <div className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 rounded-full border-2 border-white dark:border-[#0B0F17]"></div>
+                {/* Logo */}
+                <div className="h-16 flex items-center px-5 border-b border-white/5 flex-shrink-0">
+                    <div className="flex items-center gap-2.5">
+                        <div className="w-7 h-7 rounded-lg bg-sky-500/15 border border-sky-500/25 flex items-center justify-center flex-shrink-0">
+                            <WrenchIcon className="w-3.5 h-3.5 text-sky-400" />
                         </div>
-                        <div>
-                            <p className="font-medium text-slate-900 dark:text-white text-sm">{currentUser.name}</p>
-                            <p className="text-xs text-slate-500 uppercase tracking-wider">{currentUser.role}</p>
+                        <div className="min-w-0">
+                            <p className="text-sm font-semibold text-white leading-tight truncate">
+                                {settings.organization.name.split(' ')[0]}
+                            </p>
+                            <p className="text-[10px] text-sky-400 font-mono tracking-widest uppercase leading-tight">
+                                {settings.organization.name.split(' ').slice(1).join(' ') || 'MRO'}
+                            </p>
                         </div>
                     </div>
-                     <button onClick={() => setCurrentUser(null)} className="w-full mt-4 text-xs font-semibold uppercase tracking-widest text-slate-500 hover:text-slate-800 dark:hover:text-white transition-colors py-2 border border-slate-300 dark:border-white/5 rounded hover:bg-slate-100 dark:hover:bg-white/5 hover:border-slate-400 dark:hover:border-white/20">Sign Out</button>
+                </div>
+
+                {/* Nav groups */}
+                <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-4">
+                    {visibleGroups.map(group => (
+                        <div key={group.label}>
+                            <p className="px-3 mb-1 text-[9px] font-mono font-semibold text-slate-600 uppercase tracking-[0.18em]">
+                                {group.label}
+                            </p>
+                            <div className="space-y-0.5">
+                                {group.items.map(item => {
+                                    const isActive = currentView === item.view;
+                                    return (
+                                        <button
+                                            key={item.view}
+                                            onClick={() => handleNavigate({ view: item.view })}
+                                            className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-all duration-150 text-left ${
+                                                isActive
+                                                    ? 'bg-sky-500/12 text-white font-medium border border-sky-500/20'
+                                                    : 'text-slate-400 hover:text-slate-100 hover:bg-white/5'
+                                            }`}
+                                        >
+                                            <item.icon className={`w-4 h-4 flex-shrink-0 ${isActive ? 'text-sky-400' : 'text-slate-500'}`} />
+                                            {item.label}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    ))}
+                </nav>
+
+                {/* User footer */}
+                <div className="flex-shrink-0 border-t border-white/5 p-3 space-y-2">
+                    <div className="flex items-center gap-2.5 px-2 py-1.5">
+                        <div className="relative flex-shrink-0">
+                            <div className="w-7 h-7 rounded-full bg-slate-700 flex items-center justify-center text-xs font-semibold text-slate-300">
+                                {currentUser.name.charAt(0)}
+                            </div>
+                            <span className="absolute bottom-0 right-0 w-2 h-2 bg-emerald-500 rounded-full border border-[#0d1220]" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                            <p className="text-xs font-medium text-white truncate">{currentUser.name}</p>
+                            <p className="text-[10px] text-slate-500 truncate">{currentUser.role}</p>
+                        </div>
+                        <button
+                            onClick={() => setIsSettingsOpen(true)}
+                            className="flex-shrink-0 p-1 text-slate-500 hover:text-white rounded transition-colors"
+                            title="Settings"
+                        >
+                            <CogIcon className="w-4 h-4" />
+                        </button>
+                    </div>
+                    <button
+                        onClick={() => setCurrentUser(null)}
+                        className="w-full text-[11px] text-slate-600 hover:text-slate-300 py-1.5 rounded-lg hover:bg-white/5 transition-colors"
+                    >
+                        Sign out
+                    </button>
                 </div>
             </aside>
 
-            {/* Main Content */}
-            <main className="flex-1 flex flex-col h-full relative overflow-hidden">
-                {/* Decorative Background Elements */}
-                <div className="absolute top-0 left-0 w-full h-full pointer-events-none z-0">
-                    <div className={`absolute top-[-10%] right-[-5%] w-[600px] h-[600px] rounded-full blur-[120px] opacity-10 ${settings.appearance.accentColor === 'rose' ? 'bg-rose-500' : settings.appearance.accentColor === 'emerald' ? 'bg-emerald-500' : 'bg-sky-500'}`}></div>
-                    <div className="absolute bottom-[-10%] left-[-5%] w-[500px] h-[500px] bg-indigo-500/10 rounded-full blur-[100px]"></div>
-                </div>
+            {/* ── Main Content ── */}
+            <main className="flex-1 flex flex-col h-full overflow-hidden bg-[#080c14]">
 
-                <header className="h-24 flex-shrink-0 flex items-center justify-between px-8 z-10">
-                    <div className="w-full max-w-xl">
+                {/* Top header bar */}
+                <header className="h-14 flex-shrink-0 flex items-center justify-between px-6 border-b border-white/5 bg-[#0d1220]/80 backdrop-blur-sm z-10">
+                    <div className="w-full max-w-sm">
                         <GlobalSearchBar onSearch={handleGlobalSearch} isSearching={isSearching} />
                     </div>
-                    <div className="flex items-center gap-6">
+                    <div className="flex items-center gap-2">
                         <NotificationCenter notifications={state.notifications} onMarkAsRead={() => dispatch({type: 'MARK_NOTIFICATIONS_AS_READ'})} onNavigate={handleNavigate} />
-                        <button 
-                            onClick={() => setIsSettingsOpen(true)}
-                            className="p-2 rounded-full text-slate-400 hover:text-slate-800 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-white transition-colors"
-                            aria-label="Settings"
-                        >
-                            <CogIcon className="h-6 w-6" />
-                        </button>
                     </div>
                 </header>
-                <div className="flex-1 overflow-y-auto px-8 pb-8 z-10 scroll-smooth">
+
+                <div className="flex-1 overflow-y-auto px-6 py-6 scroll-smooth">
                     {state.isLoading ? (
-                        <div className="flex flex-col items-center justify-center h-full">
-                            <div className="relative w-24 h-24">
-                                <div className={`absolute inset-0 border-t-2 border-${settings.appearance.accentColor}-500 rounded-full animate-spin`}></div>
-                                <div className="absolute inset-2 border-r-2 border-indigo-500 rounded-full animate-spin reverse"></div>
-                                <div className="absolute inset-4 border-b-2 border-slate-500 rounded-full animate-pulse"></div>
-                            </div>
-                            <p className={`mt-6 text-sm font-mono tracking-widest uppercase text-${settings.appearance.accentColor}-600 dark:text-${settings.appearance.accentColor}-400`}>Initializing Systems...</p>
+                        <div className="flex flex-col items-center justify-center h-full gap-4">
+                            <div className="w-8 h-8 border-2 border-sky-500/30 border-t-sky-500 rounded-full animate-spin" />
+                            <p className="text-sm text-slate-500 font-mono">Loading…</p>
                         </div>
                     ) : (
                         <div className="animate-fade-in-up">
