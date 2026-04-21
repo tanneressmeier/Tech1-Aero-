@@ -553,14 +553,16 @@ const App: React.FC = () => {
             case 'calendar': return <CalendarView workOrders={state.workOrders} repairOrders={state.repairOrders} technicians={state.technicians} aircraftList={state.aircraftList} onSaveAssignments={handleSaveAssignments} onUpdateOrder={handleUpdateOrder} onNavigateToOrder={(view, id, initialView) => handleSelectOrder(view === 'work_orders' ? 'wo' : 'ro', id, initialView)} />;
             case 'analytics': return <AnalyticsDashboard technicians={state.technicians} generalTimeLogs={state.generalTimeLogs} workOrders={state.workOrders} repairOrders={state.repairOrders} aircraftList={state.aircraftList} partsInventory={state.partsInventory} />;
             case 'profitability': return <ProfitabilityDashboard workOrders={state.workOrders} repairOrders={state.repairOrders} inventory={[...state.partsInventory, ...state.consumables]} aircraftList={state.aircraftList} onNavigateToOrder={(view, id) => handleSelectOrder(view === 'work_orders' ? 'wo' : 'ro', id)} />;
-            case 'work_order_detail':
+            case 'work_order_detail': {
                 const wo = state.workOrders.find(o => o.wo_id === selectedOrder?.id);
                 const woAircraft = state.aircraftList.find(a => a.id === wo?.aircraft_id);
                 return wo && woAircraft ? <WorkOrderDetail order={wo} aircraft={woAircraft} technicians={state.technicians} inventory={[...state.partsInventory, ...state.consumables]} tools={state.tools} onBack={handleBackToDashboard} onUpdateOrder={handleUpdateOrder} permissions={permissions} initialViewMode={selectedOrder?.initialView} activeTimeLogs={state.activeTimeLogs} onClockInToTask={handleClockInToTask} onClockOutOfTask={handleClockOutOfTask} /> : <div>Work Order not found</div>;
-            case 'repair_order_detail':
+            }
+            case 'repair_order_detail': {
                 const ro = state.repairOrders.find(o => o.ro_id === selectedOrder?.id);
                 const roAircraft = state.aircraftList.find(a => a.id === ro?.aircraft_id);
                 return ro && roAircraft ? <RepairOrderDetail order={ro} aircraft={roAircraft} technicians={state.technicians} inventory={[...state.partsInventory, ...state.consumables]} tools={state.tools} onBack={handleBackToDashboard} onUpdateOrder={handleUpdateOrder} permissions={permissions} activeTimeLogs={state.activeTimeLogs} onClockInToTask={handleClockInToTask} onClockOutOfTask={handleClockOutOfTask} /> : <div>Repair Order not found</div>;
+            }
             default: return <div className="p-8 text-center text-slate-400">Select a view from the sidebar.</div>;
         }
     };
