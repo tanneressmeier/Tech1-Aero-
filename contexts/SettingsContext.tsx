@@ -16,8 +16,8 @@ const DEFAULT_SETTINGS: AppSettings = {
         laborRate:      125.00,
         shopSupplies:   10,
         taxRate:        8.25,
-        benefitsLoad:   35,    // % — benefits, payroll tax, workers comp on top of base rate
-        hangarOverhead: 22,    // $/hr — facility, utilities, admin amortized per labor hour
+        benefitsLoad:   35,
+        hangarOverhead: 22,
     },
     notifications: {
         emailWorkOrder: true,
@@ -30,6 +30,38 @@ const DEFAULT_SETTINGS: AppSettings = {
         density: 'Comfortable',
         reducedMotion: false,
     },
+    hangars: [
+        {
+            id: 'hangar-1',
+            label: 'Hangar 1 — Main Bay',
+            width_ft:       180,
+            depth_ft:       120,
+            door_height_ft:  26,
+            door_width_ft:  160,
+            bays:             4,
+            color:           'sky',
+        },
+        {
+            id: 'hangar-2',
+            label: 'Hangar 2 — Overflow',
+            width_ft:       120,
+            depth_ft:        80,
+            door_height_ft:  20,
+            door_width_ft:  100,
+            bays:             2,
+            color:           'indigo',
+        },
+        {
+            id: 'wash-bay',
+            label: 'Wash Bay',
+            width_ft:        60,
+            depth_ft:        60,
+            door_height_ft:  18,
+            door_width_ft:   55,
+            bays:             1,
+            color:           'emerald',
+        },
+    ],
 };
 
 interface SettingsContextType {

@@ -44,6 +44,22 @@ export interface AppSettings {
         density: 'Compact' | 'Comfortable';
         reducedMotion: boolean;
     };
+    hangars:       HangarConfig[];  // facility footprint config for 2D hangar view
+}
+
+// ---------------------------------------------------------------------------
+// HANGAR CONFIGURATION
+// ---------------------------------------------------------------------------
+
+export interface HangarConfig {
+    id:             string;
+    label:          string;
+    width_ft:       number;   // hangar floor width (wall-to-wall)
+    depth_ft:       number;   // hangar floor depth (nose-in, door to back wall)
+    door_height_ft: number;   // CRITICAL — gates aircraft by tail height
+    door_width_ft:  number;   // door clear width
+    bays:           number;   // number of nominal aircraft bays
+    color?:         string;   // optional accent color for UI
 }
 
 export interface TrainingRecord {

@@ -1,25 +1,28 @@
 
 import React, { useState, useMemo, useRef } from 'react';
-import { WorkOrder, RepairOrder, Technician } from '../types.ts';
+import { WorkOrder, RepairOrder, Technician, Aircraft } from '../types.ts';
 import { CalendarEventModal } from './CalendarEventModal.tsx';
 import { ChevronLeftIcon, ChevronRightIcon, UserGroupIcon, PlaneIcon, ChartPieIcon, BuildingOfficeIcon } from './icons.tsx';
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend, PointElement, LineElement, LineController } from 'chart.js';
 import { Bar } from 'react-chartjs-2';
 import { getVacationDatesInRange } from '../utils/skillsEngine.ts';
+import { HangarFloorPlan } from './HangarFloorPlan.tsx';
+import { useSettings } from '../contexts/SettingsContext.tsx';
 
 // Register Chart.js components
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend, PointElement, LineElement, LineController);
 
 interface CalendarViewProps {
-    workOrders: WorkOrder[];
-    repairOrders: RepairOrder[];
-    technicians: Technician[];
+    workOrders:    WorkOrder[];
+    repairOrders:  RepairOrder[];
+    technicians:   Technician[];
+    aircraftList?: Aircraft[];
     onSaveAssignments: (orderType: 'WO' | 'RO', orderId: string, technicianIds: string[]) => void;
     onUpdateOrder: (order: WorkOrder | RepairOrder) => void;
     onNavigateToOrder: (view: 'work_orders' | 'repair_orders', orderId: string, initialView?: 'list' | 'board' | 'gantt') => void;
 }
 
-type ViewMode = 'fleet' | 'personnel' | 'facility';
+type ViewMode = 'fleet' | 'personnel' | 'facility' | 'hangar';
 type TimeScale = 'month' | 'week';
 
 const FACILITIES = [
@@ -96,6 +99,12 @@ const CalendarHeader: React.FC<CalendarHeaderProps> = ({
                 >
                     <UserGroupIcon className="w-3 h-3" /> Personnel
                 </button>
+                <button
+                    onClick={() => onViewModeChange('hangar')}
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${viewMode === 'hangar' ? 'bg-sky-500/20 text-white shadow-sm ring-1 ring-sky-500/50' : 'text-slate-400 hover:text-white'}`}
+                >
+                    <BuildingOfficeIcon className="w-3 h-3" /> Hangar View
+                </button>
             </div>
 
             {/* Time Scale Toggle */}
@@ -117,12 +126,14 @@ const CalendarHeader: React.FC<CalendarHeaderProps> = ({
     </div>
 );
 
-export const CalendarView: React.FC<CalendarViewProps> = ({ workOrders, repairOrders, technicians, onSaveAssignments, onUpdateOrder, onNavigateToOrder }) => {
+export const CalendarView: React.FC<CalendarViewProps> = ({ workOrders, repairOrders, technicians, aircraftList = [], onSaveAssignments, onUpdateOrder, onNavigateToOrder }) => {
+    const { settings } = useSettings();
     const [currentDate, setCurrentDate] = useState(new Date());
-    const [viewMode, setViewMode] = useState<ViewMode>('facility'); // Defaulting to facility view as requested
+    const [viewMode, setViewMode] = useState<ViewMode>('facility');
     const [timeScale, setTimeScale] = useState<TimeScale>('month');
     const [selectedOrder, setSelectedOrder] = useState<WorkOrder | RepairOrder | null>(null);
     const [draggedEvent, setDraggedEvent] = useState<{ id: string, type: 'WO' | 'RO', resourceId: string } | null>(null);
+    const [selectedHangarId, setSelectedHangarId] = useState<string>(() => settings.hangars?.[0]?.id ?? '');
 
     const handlePrev = () => {
         const newDate = new Date(currentDate);
@@ -476,6 +487,59 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ workOrders, repairOr
                         ))}
                     </div>
                 </div>
+
+                {/* ── Hangar View ──────────────────────────────────────── */}
+                {viewMode === 'hangar' && (
+                    <div className="glass-panel rounded-xl border border-white/5 p-5">
+                        {/* Hangar selector */}
+                        <div className="flex items-center gap-4 mb-5 pb-4 border-b border-white/5">
+                            <h4 className="text-sm font-semibold text-white flex items-center gap-2">
+                                <BuildingOfficeIcon className="w-4 h-4 text-sky-400" />
+                                2D Hangar Bay View
+                            </h4>
+                            <div className="flex items-center gap-2">
+                                {(settings.hangars ?? []).map(h => (
+                                    <button key={h.id} onClick={() => setSelectedHangarId(h.id)}
+                                        className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
+                                            selectedHangarId === h.id
+                                                ? 'bg-sky-500/20 text-sky-200 border-sky-500/40'
+                                                : 'text-slate-400 border-white/10 hover:border-white/20 hover:text-white'
+                                        }`}>
+                                        {h.label}
+                                    </button>
+                                ))}
+                            </div>
+                            {/* Door height gate summary */}
+                            {(() => {
+                                const hangar = (settings.hangars ?? []).find(h => h.id === selectedHangarId);
+                                if (!hangar) return null;
+                                return (
+                                    <span className="ml-auto text-xs font-mono text-slate-500">
+                                        {hangar.width_ft}ft × {hangar.depth_ft}ft · Door: {hangar.door_height_ft}ft tall
+                                    </span>
+                                );
+                            })()}
+                        </div>
+
+                        {/* Floor plan */}
+                        {(() => {
+                            const hangar = (settings.hangars ?? []).find(h => h.id === selectedHangarId);
+                            if (!hangar) return (
+                                <p className="text-center text-slate-500 py-12 text-sm">
+                                    No hangars configured. Add them in Settings.
+                                </p>
+                            );
+                            return (
+                                <HangarFloorPlan
+                                    hangar={hangar}
+                                    aircraft={aircraftList}
+                                    workOrders={[...workOrders, ...repairOrders]}
+                                    onNavigateToOrder={onNavigateToOrder}
+                                />
+                            );
+                        })()}
+                    </div>
+                )}
 
                 <div className="glass-panel rounded-xl border border-white/5 p-4 flex flex-col">
                     <div className="flex items-center justify-between mb-2">

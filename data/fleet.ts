@@ -10,7 +10,7 @@ export const MOCK_AIRCRAFT_FLEET: Aircraft[] = [
     make: 'Cessna Citation',
     serial_number: '525B0123',
     hours_total: 2450.5,
-    // Model: Cessna Citation CJ3 (525B)
+    wingspan_ft: 53.3, length_ft: 51.2, tail_height_ft: 15.0,
     imageUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/6/6b/Cessna_525B_Citation_CJ3_OE-GDM.jpg/1200px-Cessna_525B_Citation_CJ3_OE-GDM.jpg',
     maintenance_events: [
       { id: 'me-1', name: 'Phase 1-4 Inspection', intervalType: 'hours', intervalValue: 300, lastPerformedHours: 2200, manHours: 40 },
@@ -34,7 +34,7 @@ export const MOCK_AIRCRAFT_FLEET: Aircraft[] = [
     make: 'Gulfstream',
     serial_number: 'GV-555',
     hours_total: 5123.8,
-    // Model: Gulfstream G-V
+    wingspan_ft: 93.5, length_ft: 96.4, tail_height_ft: 25.7,
     imageUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/3/30/Gulfstream_G-V_N502GV.jpg/1280px-Gulfstream_G-V_N502GV.jpg',
     maintenance_events: [
       { id: 'me-4', name: '500-hour Inspection', intervalType: 'hours', intervalValue: 500, lastPerformedHours: 4950, manHours: 60 },
@@ -56,7 +56,7 @@ export const MOCK_AIRCRAFT_FLEET: Aircraft[] = [
     make: 'Pilatus',
     serial_number: '1234',
     hours_total: 890.1,
-    // Model: Pilatus PC-12
+    wingspan_ft: 53.3, length_ft: 47.3, tail_height_ft: 14.0,
     imageUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/5/52/Pilatus_PC-12_N396AL.jpg/1280px-Pilatus_PC-12_N396AL.jpg',
     maintenance_events: [
       { id: 'me-7', name: 'Annual Inspection', intervalType: 'days', intervalValue: 365, lastPerformedDate: '2024-09-01', manHours: 50 },
@@ -74,7 +74,7 @@ export const MOCK_AIRCRAFT_FLEET: Aircraft[] = [
     make: 'Bombardier',
     serial_number: '20654',
     hours_total: 1240.5,
-    // Model: Bombardier Challenger 350
+    wingspan_ft: 69.0, length_ft: 68.4, tail_height_ft: 20.3,
     imageUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/8/80/Bombardier_Challenger_350_N721BE_%2823629479373%29.jpg/1280px-Bombardier_Challenger_350_N721BE_%2823629479373%29.jpg',
     maintenance_events: [
       { id: 'me-9', name: '400-Hour Inspection', intervalType: 'hours', intervalValue: 400, lastPerformedHours: 1100, manHours: 35 },
@@ -93,7 +93,7 @@ export const MOCK_AIRCRAFT_FLEET: Aircraft[] = [
     make: 'Embraer',
     serial_number: '50500300',
     hours_total: 650.0,
-    // Model: Embraer Phenom 300
+    wingspan_ft: 52.2, length_ft: 51.9, tail_height_ft: 17.2,
     imageUrl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/7/73/Embraer_EMB-505_Phenom_300_PT-PVB.jpg/1280px-Embraer_EMB-505_Phenom_300_PT-PVB.jpg',
     maintenance_events: [
       { id: 'me-11', name: 'Annual Inspection', intervalType: 'days', intervalValue: 365, lastPerformedDate: '2024-05-15', manHours: 45 },
