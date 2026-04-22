@@ -14,6 +14,8 @@ export const initialState: AppState = {
     generalTimeLogs:  [],
     activeTimeLogs:   [],
     notifications:    [],
+    forms8130:        [],
+    checkoutRecords:  [],
     // Unified tooling slice
     tools:            [],
     toolKits:         [],
@@ -93,6 +95,23 @@ export const appReducer = (state: AppState, action: AppAction): AppState => {
             return { ...state, comparisonResult: action.payload };
         case 'SET_AIRCRAFT_TOOL_DATA':
             return { ...state, aircraftToolData: action.payload };
+
+        case 'ADD_FORM_8130':
+            return { ...state, forms8130: [...state.forms8130, action.payload] };
+        case 'UPDATE_FORM_8130':
+            return { ...state, forms8130: state.forms8130.map(f => f.id === action.payload.id ? action.payload : f) };
+        case 'ADD_CHECKOUT_RECORD':
+            return {
+                ...state,
+                checkoutRecords: [...state.checkoutRecords, action.payload],
+                partsInventory:  state.partsInventory.map(p =>
+                    p.id === action.payload.inventory_item_id
+                        ? { ...p, qty_on_hand: Math.max(0, p.qty_on_hand - action.payload.qty_checked_out) }
+                        : p
+                ),
+            };
+        case 'ADD_INVENTORY_ITEM':
+            return { ...state, partsInventory: [...state.partsInventory, action.payload] };
 
         default:
             return state;

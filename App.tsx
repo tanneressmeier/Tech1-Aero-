@@ -14,7 +14,7 @@ import { usePermissions } from './hooks/usePermissions.ts';
 import { useSettings } from './contexts/SettingsContext.tsx';
 
 // Types
-import { View, Technician, WorkOrder, RepairOrder, Aircraft, OptimizedVisit, PurchaseOrder, PurchaseOrderItem, Squawk, StagedWorkOrder, StagedTool, StagedConsumable, ParsedPOHeader, ParsedPackingSlipItem, InventoryItem, Tool, TimeLog, Kit } from './types.ts';
+import { View, Technician, WorkOrder, RepairOrder, Aircraft, OptimizedVisit, PurchaseOrder, PurchaseOrderItem, Squawk, StagedWorkOrder, StagedTool, StagedConsumable, ParsedPOHeader, ParsedPackingSlipItem, InventoryItem, Tool, TimeLog, Kit, Form8130, CheckoutRecord } from './types.ts';
 
 // Components
 import { LoginScreen } from './components/LoginScreen.tsx';
@@ -362,11 +362,35 @@ const App: React.FC = () => {
         try {
             const updatedItem = await api.updatePart(part);
             dispatch({ type: 'SET_PARTS_INVENTORY', payload: state.partsInventory.map(p => p.id === updatedItem.id ? updatedItem : p) });
-            showToast({ message: `Part updated.`, type: 'success' });
         } catch (error) {
-            console.error("Failed to update part:", error);
+            console.error('Failed to update part:', error);
             showToast({ message: 'Failed to update part.', type: 'error' });
         }
+    };
+
+    const handleReceivePart = (form: Form8130, newItemPartial: Partial<InventoryItem>) => {
+        dispatch({ type: 'ADD_FORM_8130', payload: form });
+        const newItem: InventoryItem = {
+            id:                    newItemPartial.id ?? `part-${Date.now()}`,
+            part_no:               newItemPartial.part_no ?? '',
+            sku:                   newItemPartial.sku ?? newItemPartial.part_no ?? '',
+            description:           newItemPartial.description ?? '',
+            qty_on_hand:           newItemPartial.qty_on_hand ?? 0,
+            qty_reserved:          0,
+            reorder_level:         1,
+            shelf_location:        newItemPartial.shelf_location ?? '',
+            storage_area:          newItemPartial.storage_area ?? 'General',
+            procurement_lead_time: 7,
+            unit:                  'EA',
+            suppliers:             [],
+            quarantine_status:     'active',
+            condition:             newItemPartial.condition,
+            form_tracking_no:      newItemPartial.form_tracking_no,
+            form_8130_id:          form.id,
+            certification:         newItemPartial.certification,
+        };
+        dispatch({ type: 'UPDATE_FORM_8130', payload: { ...form, inventory_item_id: newItem.id } });
+        dispatch({ type: 'ADD_INVENTORY_ITEM', payload: newItem });
     };
 
     const handleAddTechnician = async (techData: Omit<Technician, 'id' | 'role'>) => {
@@ -541,7 +565,18 @@ const App: React.FC = () => {
             case 'work_orders': return <WorkOrderDashboard workOrders={state.workOrders} aircraftList={state.aircraftList} onSelectOrder={(id) => handleSelectOrder('wo', id)} onAddWorkOrder={handleAddWorkOrder} initialFilters={initialFilters} />;
             case 'repair_orders': return <RepairOrderDashboard repairOrders={state.repairOrders} aircraftList={state.aircraftList} onSelectOrder={(id) => handleSelectOrder('ro', id)} onAddRepairOrder={handleAddRepairOrder} initialFilters={initialFilters} />;
             case 'tooling': return <ToolingDashboard tools={state.tools} toolKits={state.toolKits} neededTools={state.neededTools} onAddTool={handleAddToolDirect} onUpdateTool={handleUpdateToolDirect} onDeleteTool={handleDeleteToolDirect} onSetTools={handleSetTools} onSetKits={handleSetKits} onSetNeededTools={handleSetNeededTools} />;
-            case 'inventory': return <InventoryDashboard parts={[...state.partsInventory]} onCreatePurchaseOrder={(items) => { /* logic */ }} onUpdatePart={handleUpdatePart} />;
+            case 'inventory': return <InventoryDashboard
+                parts={state.partsInventory}
+                consumables={state.consumables}
+                forms8130={state.forms8130}
+                checkoutRecords={state.checkoutRecords}
+                currentUser={currentUser!}
+                onCreatePurchaseOrder={(items) => { /* PO creation logic */ }}
+                onUpdatePart={handleUpdatePart}
+                onUpdateConsumable={handleUpdatePart}
+                onReceive={handleReceivePart}
+                onUpdateForm={f => dispatch({ type: 'UPDATE_FORM_8130', payload: f })}
+            />;
             case 'consumables': return <ConsumablesDashboard consumables={state.consumables} onUpdateConsumable={handleUpdateConsumable} onCreatePurchaseOrder={(items) => { /* logic */ }} />;
             case 'personnel': return <PersonnelDashboard
                 technicians={state.technicians}

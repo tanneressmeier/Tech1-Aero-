@@ -140,6 +140,69 @@ export interface PartCertification {
     mediaName?:string;
 }
 
+// ---------------------------------------------------------------------------
+// FAA 8130-3 FORM RECORD
+// Stored when a form is ingested via the Receiving tab.
+// All 13 blocks captured; audit_log is append-only.
+// ---------------------------------------------------------------------------
+export interface Form8130 {
+    id:               string;
+    // Block fields extracted by AI (all optional — human fills gaps)
+    block1_ship_from?:   string;
+    block2_ship_to?:     string;
+    block3_wo_number?:   string;
+    block5_tracking_no?: string;   // FAA form tracking number
+    block6_part_no:      string;
+    block6_description:  string;
+    block7_serial_no?:   string;
+    block8_eligibility?: 'Domestic' | 'Export' | 'Unknown';
+    block9_quantity:     number;
+    block10_batch_lot?:  string;
+    block11_condition:   'New' | 'Overhauled' | 'Repaired' | 'Inspected' | 'Modified' | 'Unknown';
+    block12_remarks?:    string;   // life limits, TSN, TSO statements
+    block13a_agency?:    string;
+    block13b_cert_no?:   string;
+    // Internal fields
+    received_date:       string;   // ISO
+    status:              'quarantined' | 'released' | 'consumed';
+    inventory_item_id?:  string;   // set when released → creates/links InventoryItem
+    pdf_data_url?:       string;   // base64 of original PDF/image for side-by-side viewer
+    pdf_mime_type?:      string;
+    shelf_location?:     string;   // bin assigned during release
+    // Inspector release
+    release_inspection?: {
+        inspector_name:  string;
+        cert_number:     string;
+        timestamp:       string;
+        notes?:          string;
+    };
+    // Audit log — immutable, append-only
+    audit_log: {
+        user:      string;
+        timestamp: string;
+        action:    string;
+        detail?:   string;
+    }[];
+}
+
+// ---------------------------------------------------------------------------
+// CHECKOUT RECORD
+// Created when a part is assigned to a squawk / leaves the warehouse.
+// ---------------------------------------------------------------------------
+export interface CheckoutRecord {
+    id:                  string;
+    inventory_item_id:   string;
+    form_8130_id?:       string;   // traceability link
+    qty_checked_out:     number;
+    bin_id:              string;   // e.g. BJC01A02
+    work_order_id:       string;
+    squawk_id:           string;
+    technician_id:       string;
+    timestamp:           string;
+    aircraft_id:         string;
+    aircraft_hours_at_install?: number;
+}
+
 export interface InventoryItem {
     id:                    string;
     part_no:               string;
@@ -148,14 +211,23 @@ export interface InventoryItem {
     qty_on_hand:           number;
     qty_reserved:          number;
     reorder_level:         number;
-    shelf_location:        string;
+    shelf_location:        string;   // bin ID e.g. BJC01A02 or legacy "A-01-01"
     storage_area:          string;
     procurement_lead_time: number;
     unit:                  string;
     suppliers:             Supplier[];
     expiration_date?:      string;
     certification?:        PartCertification;
-    expected_delivery_date?: string;   // ISO date — set when item is on backorder (Phase 3)
+    expected_delivery_date?: string;   // ISO date — backorder Gantt cascade
+    // Warehouse fields (Phase 4 — warehouse integration)
+    quarantine_status?:  'quarantined' | 'active' | 'hold';
+    condition?:          'New' | 'Overhauled' | 'Repaired' | 'Inspected' | 'Modified';
+    life_limit_hours?:   number;
+    life_used_hours?:    number;
+    form_tracking_no?:   string;   // Block 5 of originating 8130
+    form_8130_id?:       string;
+    dom?:                string;
+    shelf_life_days?:    number;
 }
 
 // ---------------------------------------------------------------------------

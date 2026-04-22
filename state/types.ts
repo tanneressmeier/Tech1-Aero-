@@ -2,6 +2,7 @@ import {
     Aircraft, OptimizedSchedule, WorkOrder, RepairOrder, Technician,
     InventoryItem, Tool, PurchaseOrder, TimeLog, MaintenanceForecast,
     Notification, Kit, AircraftToolData, ComparisonResult,
+    Form8130, CheckoutRecord,
 } from '../types.ts';
 
 export interface AppState {
@@ -18,6 +19,8 @@ export interface AppState {
     generalTimeLogs: TimeLog[];
     activeTimeLogs:  TimeLog[];
     notifications:   Notification[];
+    forms8130:       Form8130[];
+    checkoutRecords: CheckoutRecord[];
 
     // ── Unified tooling slice (Phase 1 addition) ──────────────────────────
     tools:             Tool[];            // master tool inventory
@@ -58,4 +61,9 @@ export type AppAction =
     | { type: 'DELETE_KIT';             payload: string }
     | { type: 'SET_NEEDED_TOOLS';       payload: Tool[] }
     | { type: 'SET_COMPARISON_RESULT';  payload: ComparisonResult | null }
-    | { type: 'SET_AIRCRAFT_TOOL_DATA'; payload: AircraftToolData[] };
+    | { type: 'SET_AIRCRAFT_TOOL_DATA'; payload: AircraftToolData[] }
+    // ── Warehouse / 8130 ─────────────────────────────────────────────────
+    | { type: 'ADD_FORM_8130';          payload: Form8130 }
+    | { type: 'UPDATE_FORM_8130';       payload: Form8130 }
+    | { type: 'ADD_CHECKOUT_RECORD';    payload: CheckoutRecord }
+    | { type: 'ADD_INVENTORY_ITEM';     payload: InventoryItem };

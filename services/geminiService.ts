@@ -311,6 +311,55 @@ Schema: {"customerDescription":"...","lineItems":[{"description":"...","part_no"
 }
 
 // ── 9. Packing Slip Image Analysis (multimodal, user-gated) ─────────────────
+// ── 9b. FAA 8130-3 Form Extraction ───────────────────────────────────────────
+export interface Extracted8130 {
+    block1_ship_from?:   string;
+    block2_ship_to?:     string;
+    block3_wo_number?:   string;
+    block5_tracking_no?: string;
+    block6_part_no:      string;
+    block6_description:  string;
+    block7_serial_no?:   string;
+    block8_eligibility?: 'Domestic' | 'Export' | 'Unknown';
+    block9_quantity:     number;
+    block10_batch_lot?:  string;
+    block11_condition:   'New' | 'Overhauled' | 'Repaired' | 'Inspected' | 'Modified' | 'Unknown';
+    block12_remarks?:    string;
+    block13a_agency?:    string;
+    block13b_cert_no?:   string;
+}
+
+export async function analyze8130Form(base64Data: string, mimeType: string): Promise<Extracted8130> {
+    const ai = getAI();
+    const r = await ai.models.generateContent({
+        model: MODEL,
+        contents: [
+            { inlineData: { mimeType, data: base64Data } },
+            { text: `You are an FAA document extraction specialist. Extract all available fields from this FAA 8130-3 Authorized Release Certificate. Return ONLY valid JSON matching this exact schema — use empty string for missing text fields, 0 for missing numbers, "Unknown" for unknown condition/eligibility:
+{
+  "block1_ship_from": "",
+  "block2_ship_to": "",
+  "block3_wo_number": "",
+  "block5_tracking_no": "",
+  "block6_part_no": "",
+  "block6_description": "",
+  "block7_serial_no": "",
+  "block8_eligibility": "Domestic",
+  "block9_quantity": 1,
+  "block10_batch_lot": "",
+  "block11_condition": "New",
+  "block12_remarks": "",
+  "block13a_agency": "",
+  "block13b_cert_no": ""
+}
+block11_condition must be one of: New, Overhauled, Repaired, Inspected, Modified, Unknown.
+block8_eligibility must be one of: Domestic, Export, Unknown.` },
+        ] as any,
+        config: { responseMimeType: 'application/json', temperature: 0.0 },
+    });
+    return cleanJson<Extracted8130>(r.text);
+}
+
 export async function analyzePackingSlip(base64Image: string, mimeType: string): Promise<ParsedPackingSlipItem[]> {
     const ai = getAI();
     const r = await ai.models.generateContent({
