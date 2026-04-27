@@ -36,6 +36,8 @@ export const WorkOrderDetail: React.FC<WorkOrderDetailProps> = ({
     order, aircraft, technicians, inventory, tools, onBack, onUpdateOrder, permissions,
     initialViewMode = 'list', activeTimeLogs = [], onClockInToTask, onClockOutOfTask,
 }) => {
+    // Find the logged-in user from the technicians list (CURRENT_USER_ID is 'tech-1' fallback)
+    const currentUser = technicians.find(t => t.id === 'tech-1') ?? technicians[0];
     const [isQuoteModalOpen, setIsQuoteModalOpen] = useState(false);
     const [viewMode, setViewMode] = useState<'list' | 'board' | 'gantt'>(initialViewMode);
     const [pendingCompletionSquawkId, setPendingCompletionSquawkId] = useState<string | null>(null);
@@ -210,6 +212,7 @@ export const WorkOrderDetail: React.FC<WorkOrderDetailProps> = ({
                             <SquawkDetailView key={squawk.squawk_id}
                                 squawk={squawk} order={order} aircraft={aircraft}
                                 technicians={technicians} inventory={inventory} tools={tools}
+                                currentUser={currentUser}
                                 onUpdateOrder={onUpdateOrder} permissions={permissions}
                                 activeTimeLogs={activeTimeLogs}
                                 onClockInToTask={onClockInToTask}

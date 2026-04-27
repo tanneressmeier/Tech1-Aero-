@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { XMarkIcon } from './icons.tsx';
 import { Portal } from './Portal.tsx';
 
@@ -14,6 +14,14 @@ interface SidePanelProps {
 export const SidePanel: React.FC<SidePanelProps> = ({
     isOpen, onClose, title, children, footer, size = 'lg',
 }) => {
+    // Track whether panel has ever been opened — only mount children after first open
+    // This prevents N squawk panels from all rendering their full content on page load
+    const [hasBeenOpened, setHasBeenOpened] = useState(false);
+
+    useEffect(() => {
+        if (isOpen) setHasBeenOpened(true);
+    }, [isOpen]);
+
     useEffect(() => {
         const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
         if (isOpen) {
@@ -33,9 +41,7 @@ export const SidePanel: React.FC<SidePanelProps> = ({
             <div
                 className={`fixed inset-0 z-[200] transition-opacity duration-300 ${isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
                 aria-modal="true" role="dialog">
-                {/* Backdrop */}
                 <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
-                {/* Panel */}
                 <div className={`fixed top-0 right-0 h-full bg-[#0d1220]/95 backdrop-blur-xl border-l border-white/10 shadow-2xl flex flex-col w-full ${sizeW[size]} transition-transform duration-300 ease-out ${isOpen ? 'translate-x-0' : 'translate-x-full'}`}>
                     <header className="px-6 py-5 border-b border-white/10 flex justify-between items-center flex-shrink-0">
                         <h2 className="text-xl font-semibold text-white">{title}</h2>
@@ -44,10 +50,11 @@ export const SidePanel: React.FC<SidePanelProps> = ({
                         </button>
                     </header>
                     <main className="flex-1 px-6 py-5 overflow-y-auto">
-                        {children}
+                        {/* Only render children after the panel has been opened at least once */}
+                        {hasBeenOpened ? children : null}
                     </main>
                     <footer className="px-6 py-4 bg-white/3 border-t border-white/10 flex justify-between items-center gap-3 flex-shrink-0">
-                        {footer}
+                        {hasBeenOpened ? footer : null}
                     </footer>
                 </div>
             </div>

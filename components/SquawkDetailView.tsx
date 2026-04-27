@@ -19,21 +19,19 @@ import { predictToolsFromJob } from '../services/geminiService.ts';
 import { useToast } from '../contexts/ToastContext.tsx';
 
 interface SquawkDetailViewProps {
-    squawk:     Squawk;
-    order:      WorkOrder | RepairOrder;
-    aircraft:   Aircraft;
-    technicians:Technician[];
-    inventory:  InventoryItem[];
-    tools:      Tool[];
+    squawk:      Squawk;
+    order:       WorkOrder | RepairOrder;
+    aircraft:    Aircraft;
+    technicians: Technician[];
+    inventory:   InventoryItem[];
+    tools:       Tool[];
+    currentUser?: Technician;
     onUpdateOrder:       (updatedOrder: WorkOrder | RepairOrder) => void;
     permissions:         Permissions;
-    // Time tracking — shop-level active logs passed from App state
     activeTimeLogs?:     TimeLog[];
     onClockInToTask?:    (log: Omit<TimeLog, 'log_id'>) => void;
     onClockOutOfTask?:   (logId: string, endTime: string) => void;
 }
-
-const CURRENT_USER_ID = 'tech-1';
 
 // ── Calibration status pill used in the tools list ──────────────────────────
 const CalPill: React.FC<{ tool: Tool }> = ({ tool }) => {
@@ -48,10 +46,12 @@ const CalPill: React.FC<{ tool: Tool }> = ({ tool }) => {
 };
 
 export const SquawkDetailView: React.FC<SquawkDetailViewProps> = ({
-    squawk, order, aircraft, technicians, inventory, tools, onUpdateOrder, permissions,
-    activeTimeLogs = [], onClockInToTask, onClockOutOfTask,
+    squawk, order, aircraft, technicians, inventory, tools, currentUser: currentUserProp,
+    onUpdateOrder, permissions, activeTimeLogs = [], onClockInToTask, onClockOutOfTask,
 }) => {
     const { showToast } = useToast();
+    // Use passed currentUser, fall back gracefully
+    const currentUser = currentUserProp ?? technicians.find(t => t.role === 'Admin') ?? technicians[0];
     const [isTimeLogPanelOpen,    setIsTimeLogPanelOpen]    = useState(false);
     const [isAssignPartPanelOpen, setIsAssignPartPanelOpen] = useState(false);
     const [isAssignToolPanelOpen, setIsAssignToolPanelOpen] = useState(false);
@@ -67,8 +67,6 @@ export const SquawkDetailView: React.FC<SquawkDetailViewProps> = ({
     const [draftPct, setDraftPct] = useState<number>(squawk.completion_percentage ?? 0);
     // Sync draft when squawk identity changes (switching between squawks)
     useEffect(() => { setDraftPct(squawk.completion_percentage ?? 0); }, [squawk.squawk_id, squawk.completion_percentage]);
-
-    const currentUser = technicians.find(t => t.id === CURRENT_USER_ID)!;
 
     // Resolved objects for display
     const assignedTools = squawk.used_tool_ids
