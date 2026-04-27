@@ -19,7 +19,24 @@ import {
 } from '../types.ts';
 
 // ── Client init ──────────────────────────────────────────────────────────────
-const getAI = () => new GoogleGenAI({ apiKey: process.env.API_KEY! });
+// Read API key from Vite environment — must be prefixed VITE_ in .env
+// e.g. .env file: VITE_GEMINI_API_KEY=AIza...
+const getApiKey = (): string => {
+    const key =
+        (import.meta.env as any).VITE_GEMINI_API_KEY ||
+        (import.meta.env as any).VITE_API_KEY ||
+        (import.meta.env as any).API_KEY;          // fallback for legacy .env
+    if (!key) {
+        throw new Error(
+            'Gemini API key not found. ' +
+            'Add VITE_GEMINI_API_KEY=your_key_here to your .env file ' +
+            'in the Tech1-Aero- project root and restart npm run dev.'
+        );
+    }
+    return key;
+};
+
+const getAI = () => new GoogleGenAI({ apiKey: getApiKey() });
 const MODEL = 'gemini-2.5-flash';
 
 // ── In-memory cache (30 min TTL) ─────────────────────────────────────────────
