@@ -36,6 +36,7 @@ import { NotificationCenter } from './components/NotificationCenter.tsx';
 import { AnalyticsDashboard } from './components/AnalyticsDashboard.tsx';
 import { ProfitabilityDashboard } from './components/ProfitabilityDashboard.tsx';
 import { SettingsModal } from './components/SettingsModal.tsx';
+import { ErrorBoundary } from './components/ErrorBoundary.tsx';
 
 // Icons
 import {
@@ -619,12 +620,20 @@ const App: React.FC = () => {
             case 'work_order_detail': {
                 const wo = state.workOrders.find(o => o.wo_id === selectedOrder?.id);
                 const woAircraft = state.aircraftList.find(a => a.id === wo?.aircraft_id);
-                return wo && woAircraft ? <WorkOrderDetail order={wo} aircraft={woAircraft} technicians={state.technicians} inventory={[...state.partsInventory, ...state.consumables]} tools={state.tools} onBack={handleBackToDashboard} onUpdateOrder={handleUpdateOrder} permissions={permissions} initialViewMode={selectedOrder?.initialView} activeTimeLogs={state.activeTimeLogs} onClockInToTask={handleClockInToTask} onClockOutOfTask={handleClockOutOfTask} /> : <div>Work Order not found</div>;
+                return (
+                    <ErrorBoundary label={`Work Order ${selectedOrder?.id}`}>
+                        {wo && woAircraft ? <WorkOrderDetail order={wo} aircraft={woAircraft} technicians={state.technicians} inventory={[...state.partsInventory, ...state.consumables]} tools={state.tools} onBack={handleBackToDashboard} onUpdateOrder={handleUpdateOrder} permissions={permissions} initialViewMode={selectedOrder?.initialView} activeTimeLogs={state.activeTimeLogs} onClockInToTask={handleClockInToTask} onClockOutOfTask={handleClockOutOfTask} /> : <div className="p-8 text-center text-slate-400">Work Order not found</div>}
+                    </ErrorBoundary>
+                );
             }
             case 'repair_order_detail': {
                 const ro = state.repairOrders.find(o => o.ro_id === selectedOrder?.id);
                 const roAircraft = state.aircraftList.find(a => a.id === ro?.aircraft_id);
-                return ro && roAircraft ? <RepairOrderDetail order={ro} aircraft={roAircraft} technicians={state.technicians} inventory={[...state.partsInventory, ...state.consumables]} tools={state.tools} onBack={handleBackToDashboard} onUpdateOrder={handleUpdateOrder} permissions={permissions} activeTimeLogs={state.activeTimeLogs} onClockInToTask={handleClockInToTask} onClockOutOfTask={handleClockOutOfTask} /> : <div>Repair Order not found</div>;
+                return (
+                    <ErrorBoundary label={`Repair Order ${selectedOrder?.id}`}>
+                        {ro && roAircraft ? <RepairOrderDetail order={ro} aircraft={roAircraft} technicians={state.technicians} inventory={[...state.partsInventory, ...state.consumables]} tools={state.tools} onBack={handleBackToDashboard} onUpdateOrder={handleUpdateOrder} permissions={permissions} activeTimeLogs={state.activeTimeLogs} onClockInToTask={handleClockInToTask} onClockOutOfTask={handleClockOutOfTask} /> : <div className="p-8 text-center text-slate-400">Repair Order not found</div>}
+                    </ErrorBoundary>
+                );
             }
             default: return <div className="p-8 text-center text-slate-400">Select a view from the sidebar.</div>;
         }

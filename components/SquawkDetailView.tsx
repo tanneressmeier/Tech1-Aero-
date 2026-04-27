@@ -601,7 +601,23 @@ export const SquawkDetailView: React.FC<SquawkDetailViewProps> = ({
             </SidePanel>
 
             {/* Modals */}
-            <TimeLogModal isOpen={isTimeLogPanelOpen} onClose={() => setIsTimeLogPanelOpen(false)} technicians={technicians} onLogTime={handleLogTime} currentUser={currentUser} />
+            <TimeLogModal
+                isOpen={isTimeLogPanelOpen}
+                onClose={() => setIsTimeLogPanelOpen(false)}
+                technicians={technicians}
+                currentUser={currentUser ?? technicians[0]}
+                squawk={squawk}
+                orderId={'wo_id' in order ? order.wo_id : order.ro_id}
+                orderType={('wo_id' in order ? 'WO' : 'RO') as 'WO' | 'RO'}
+                activeTaskLog={(activeTimeLogs ?? []).find(
+                    l => l.technician_id === currentUser?.id &&
+                         l.squawk_id === squawk.squawk_id &&
+                         !l.end_time
+                )}
+                onClockInToTask={onClockInToTask ?? (() => {})}
+                onClockOutOfTask={onClockOutOfTask ?? (() => {})}
+                onLogManual={handleLogTime}
+            />
             <AssignPartModal isOpen={isAssignPartPanelOpen} onClose={() => setIsAssignPartPanelOpen(false)} inventory={inventory} onAssignPart={handleAssignPart} />
             <AssignToolModal isOpen={isAssignToolPanelOpen} onClose={() => setIsAssignToolPanelOpen(false)} tools={tools} onAssignTool={handleAssignTool} />
             <AssignTechnicianModal isOpen={isAssignTechPanelOpen} onClose={() => setIsAssignTechPanelOpen(false)} technicians={technicians} assignedIds={squawk.assigned_technician_ids} squawk={squawk} onAssign={handleAssignTech} onUnassign={handleUnassignTech} />
