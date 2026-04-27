@@ -139,12 +139,75 @@ export const PartEditModal: React.FC<PartEditModalProps> = ({ isOpen, onClose, p
                                 value={(formData as any).expected_delivery_date || ''}
                                 onChange={handleChange}
                                 className="mt-1 block w-full bg-slate-900 border border-slate-600 rounded-md shadow-sm py-2 px-3 text-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" />
-                            <p className="text-xs text-slate-500 mt-1">Leave blank if in stock. When set and qty available &lt; required, the Gantt chart will automatically shift dependent tasks to start after this date.</p>
                         </div>
                     </div>
                 </div>
 
-                {/* Certification Section */}
+                {/* Warehouse / Compliance Fields */}
+                <div className="bg-slate-900/50 p-4 rounded-lg border border-amber-500/20">
+                    <h3 className="text-lg font-medium text-white border-b border-white/10 pb-2 mb-4 flex items-center gap-2">
+                        <ShieldCheckIcon className="w-5 h-5 text-amber-400" />
+                        Warehouse & Compliance
+                    </h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {/* Condition */}
+                        <div>
+                            <label className="block text-sm font-medium text-slate-300">Condition (8130-3 Block 11)</label>
+                            <select value={(formData as any).condition || ''}
+                                onChange={e => setFormData(prev => ({ ...prev, condition: e.target.value || undefined } as any))}
+                                className="mt-1 block w-full bg-slate-800 border border-slate-600 rounded-md py-2 px-3 text-sm focus:outline-none focus:ring-indigo-500">
+                                <option value="">Not specified</option>
+                                {['New','Overhauled','Repaired','Inspected','Modified'].map(c => (
+                                    <option key={c} value={c}>{c}</option>
+                                ))}
+                            </select>
+                        </div>
+                        {/* Quarantine status */}
+                        <div>
+                            <label className="block text-sm font-medium text-slate-300">Stock Status</label>
+                            <select value={(formData as any).quarantine_status || 'active'}
+                                onChange={e => setFormData(prev => ({ ...prev, quarantine_status: e.target.value } as any))}
+                                className="mt-1 block w-full bg-slate-800 border border-slate-600 rounded-md py-2 px-3 text-sm focus:outline-none focus:ring-indigo-500">
+                                <option value="active">Active — available for use</option>
+                                <option value="quarantined">Quarantined — pending inspection</option>
+                                <option value="hold">Hold — not available</option>
+                            </select>
+                        </div>
+                        {/* Form tracking number */}
+                        <div>
+                            <label className="block text-sm font-medium text-slate-300">8130-3 Form Tracking #</label>
+                            <input type="text" value={(formData as any).form_tracking_no || ''}
+                                onChange={e => setFormData(prev => ({ ...prev, form_tracking_no: e.target.value } as any))}
+                                placeholder="e.g. FAA-2024-XXXXX"
+                                className="mt-1 block w-full bg-slate-900 border border-slate-600 rounded-md py-2 px-3 text-sm font-mono focus:outline-none focus:ring-indigo-500" />
+                        </div>
+                        {/* Life limit hours */}
+                        <div>
+                            <label className="block text-sm font-medium text-slate-300">Life Limit (hours)</label>
+                            <input type="number" min="0" value={(formData as any).life_limit_hours ?? ''}
+                                onChange={e => setFormData(prev => ({ ...prev, life_limit_hours: e.target.value ? parseFloat(e.target.value) : undefined } as any))}
+                                placeholder="Leave blank if no limit"
+                                className="mt-1 block w-full bg-slate-900 border border-slate-600 rounded-md py-2 px-3 text-sm font-mono focus:outline-none focus:ring-indigo-500" />
+                        </div>
+                        {/* DOM */}
+                        <div>
+                            <label className="block text-sm font-medium text-slate-300">Date of Manufacture (DOM)</label>
+                            <input type="date" value={(formData as any).dom || ''}
+                                onChange={e => setFormData(prev => ({ ...prev, dom: e.target.value || undefined } as any))}
+                                className="mt-1 block w-full bg-slate-900 border border-slate-600 rounded-md py-2 px-3 text-sm focus:outline-none focus:ring-indigo-500" />
+                        </div>
+                        {/* Shelf life */}
+                        <div>
+                            <label className="block text-sm font-medium text-slate-300">Shelf Life (days)</label>
+                            <input type="number" min="0" value={(formData as any).shelf_life_days ?? ''}
+                                onChange={e => setFormData(prev => ({ ...prev, shelf_life_days: e.target.value ? parseInt(e.target.value) : undefined } as any))}
+                                placeholder="Consumables only"
+                                className="mt-1 block w-full bg-slate-900 border border-slate-600 rounded-md py-2 px-3 text-sm font-mono focus:outline-none focus:ring-indigo-500" />
+                        </div>
+                    </div>
+                </div>
+
+                {/* Certification Section (existing, kept) */}
                 <div className="bg-slate-900/50 p-4 rounded-lg border border-indigo-500/30">
                     <h3 className="text-lg font-medium text-white border-b border-white/10 pb-2 mb-4 flex items-center gap-2">
                         <ShieldCheckIcon className="w-5 h-5 text-emerald-400" />

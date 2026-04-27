@@ -40,9 +40,11 @@ const AircraftCard: React.FC<{
             {/* Background Image with Gradient Overlay */}
             {aircraft.imageUrl ? (
                 <>
-                    <div 
-                        className="absolute inset-0 bg-cover bg-center transition-transform duration-700 group-hover:scale-110"
-                        style={{ backgroundImage: `url(${aircraft.imageUrl})` }}
+                    <img
+                        src={aircraft.imageUrl}
+                        alt={`${aircraft.make} ${aircraft.model}`}
+                        className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
+                        onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-[#0B0F17] via-[#0B0F17]/70 to-transparent opacity-90 transition-opacity duration-300 group-hover:opacity-80"></div>
                 </>
@@ -215,10 +217,12 @@ export const AircraftDashboard: React.FC<AircraftDashboardProps> = ({
            
            {/* Hero Image Section for Detail View */}
            {selectedAircraft.imageUrl && (
-               <div className="h-64 relative">
-                   <div 
-                        className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-                        style={{ backgroundImage: `url(${selectedAircraft.imageUrl})`, backgroundPosition: 'center 40%' }}
+               <div className="h-64 relative overflow-hidden">
+                   <img
+                       src={selectedAircraft.imageUrl}
+                       alt={`${selectedAircraft.make} ${selectedAircraft.model}`}
+                       className="absolute inset-0 w-full h-full object-cover object-center"
+                       onError={e => { const el = e.target as HTMLImageElement; el.closest('.h-64')?.classList.add('hidden'); }}
                    />
                    <div className="absolute inset-0 bg-gradient-to-t from-[#0B0F17] via-[#0B0F17]/60 to-transparent"></div>
                </div>

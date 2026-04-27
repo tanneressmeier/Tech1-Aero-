@@ -34,7 +34,40 @@ export const api = {
       consumables: MOCK_CONSUMABLES_INVENTORY,
       tools: MOCK_TOOLS,
       purchaseOrders: MOCK_PURCHASE_ORDERS,
-      generalTimeLogs: [], // These are client-side
+      generalTimeLogs: (() => {
+          const logs = [];
+          const techs = ['tech-1','tech-2','tech-3','tech-5','tech-6'];
+          const now = Date.now();
+          // Generate 60 days of historical time logs
+          for (let day = 60; day >= 1; day--) {
+              const dayMs = now - day * 86400000;
+              // Skip weekends
+              const dow = new Date(dayMs).getDay();
+              if (dow === 0 || dow === 6) continue;
+              techs.forEach((techId, tidx) => {
+                  // Shop presence (8h non-billable)
+                  logs.push({
+                      log_id: `shop-${techId}-${day}`,
+                      technician_id: techId,
+                      start_time: new Date(dayMs + 8*3600000).toISOString(),
+                      end_time:   new Date(dayMs + 16*3600000).toISOString(),
+                      is_billable: false,
+                  });
+                  // Billable task time (varies by tech efficiency)
+                  const billableHrs = 4 + (tidx % 3) + Math.floor(Math.random() * 3);
+                  logs.push({
+                      log_id: `bill-${techId}-${day}`,
+                      technician_id: techId,
+                      start_time: new Date(dayMs + 8*3600000).toISOString(),
+                      end_time:   new Date(dayMs + (8+billableHrs)*3600000).toISOString(),
+                      is_billable: true,
+                      order_id: day < 45 ? 'WO-24-001' : 'WO-25-001',
+                      order_type: 'WO' as const,
+                  });
+              });
+          }
+          return logs;
+      })(),
       activeTimeLogs: [],  // These are client-side
     }));
   },

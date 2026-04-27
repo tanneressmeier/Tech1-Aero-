@@ -57,6 +57,7 @@ export const SquawkDetailView: React.FC<SquawkDetailViewProps> = ({
     const [isAssignToolPanelOpen, setIsAssignToolPanelOpen] = useState(false);
     const [isAssignTechPanelOpen, setIsAssignTechPanelOpen] = useState(false);
     const [isSquawkAdminModalOpen,setIsSquawkAdminModalOpen]= useState(false);
+    const [isPanelOpen,           setIsPanelOpen]           = useState(false);
     const [isSignatureModalOpen,  setIsSignatureModalOpen]  = useState<keyof Squawk['signatures'] | null>(null);
     const [isTroubleshootingModalOpen, setIsTroubleshootingModalOpen] = useState(false);
     const [troubleshootingGuide,  setTroubleshootingGuide]  = useState('');
@@ -214,8 +215,6 @@ export const SquawkDetailView: React.FC<SquawkDetailViewProps> = ({
     };
 
     // ── Panel open state for progressive disclosure ─────────────────────────
-    const [isPanelOpen, setIsPanelOpen] = useState(false);
-
     const orderId   = 'wo_id' in order ? order.wo_id : order.ro_id;
     const pct       = squawk.status === 'completed' ? 100 : (squawk.completion_percentage ?? 0);
     const hasIssues = assignedTools.some(t => t.calibrationRequired && ((t.calibrationDueDays ?? 999) < 0));
