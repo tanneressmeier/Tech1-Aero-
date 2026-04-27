@@ -14,6 +14,7 @@ import {
 import { WarehouseMap } from './WarehouseMap.tsx';
 import { ReceivingModal } from './ReceivingModal.tsx';
 import { FormArchive } from './FormArchive.tsx';
+import { LocalPdfLibrary } from './LocalPdfLibrary.tsx';
 import { LabelPrinter } from './LabelPrinter.tsx';
 import { PartEditModal } from './PartEditModal.tsx';
 import { FixedSizeList as List } from 'react-window';
@@ -33,7 +34,7 @@ interface InventoryDashboardProps {
     onUpdateForm:        (form: Form8130) => void;
 }
 
-type Tab = 'inventory' | 'map' | 'receiving' | 'archive' | 'consumables';
+type Tab = 'inventory' | 'map' | 'receiving' | 'archive' | 'pdf_library' | 'consumables';
 
 // ── Inventory tab ─────────────────────────────────────────────────────────────
 const InventoryTab: React.FC<{
@@ -335,6 +336,7 @@ export const InventoryDashboard: React.FC<InventoryDashboardProps> = ({
                     { id: 'map',         label: 'Warehouse Map' },
                     { id: 'receiving',   label: 'Receiving',        badge: quarCount || undefined },
                     { id: 'archive',     label: '8130 Archive',     badge: forms8130.length || undefined },
+                    { id: 'pdf_library', label: 'PDF Library',       icon: <DocumentTextIcon className="w-3.5 h-3.5" /> },
                     { id: 'consumables', label: 'Consumables',      badge: expiredConsum || undefined },
                 ]}
                 active={tab}
@@ -408,6 +410,18 @@ export const InventoryDashboard: React.FC<InventoryDashboardProps> = ({
                         checkouts={checkoutRecords}
                         parts={parts}
                         onUpdate={onUpdateForm}
+                    />
+                )}
+
+                {tab === 'pdf_library' && (
+                    <LocalPdfLibrary
+                        forms={forms8130}
+                        currentUser={currentUser}
+                        onNewForm={f => {
+                            // Dispatch handled by onReceive-equivalent — pass up to App
+                            onUpdateForm({ ...f, status: 'released' });
+                        }}
+                        onUpdateForm={onUpdateForm}
                     />
                 )}
 

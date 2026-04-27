@@ -575,7 +575,14 @@ const App: React.FC = () => {
                 onUpdatePart={handleUpdatePart}
                 onUpdateConsumable={handleUpdatePart}
                 onReceive={handleReceivePart}
-                onUpdateForm={f => dispatch({ type: 'UPDATE_FORM_8130', payload: f })}
+                onUpdateForm={f => {
+                    // If the form already exists, update it; otherwise add it (from LocalPdfLibrary AI scan)
+                    if (state.forms8130.some(existing => existing.id === f.id)) {
+                        dispatch({ type: 'UPDATE_FORM_8130', payload: f });
+                    } else {
+                        dispatch({ type: 'ADD_FORM_8130', payload: f });
+                    }
+                }}
             />;
             case 'consumables': return <ConsumablesDashboard consumables={state.consumables} onUpdateConsumable={handleUpdateConsumable} onCreatePurchaseOrder={(items) => { /* logic */ }} />;
             case 'personnel': return <PersonnelDashboard
