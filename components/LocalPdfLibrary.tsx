@@ -30,10 +30,12 @@ const PDF_GLOB = import.meta.glob('/public/8130s/*.pdf', {
 }) as Record<string, string>;
 
 // Convert glob paths to clean filenames and URLs
+// Vite serves /public/* at root, so strip the /public prefix from the URL
 function buildPdfCatalog(): { filename: string; url: string }[] {
     return Object.entries(PDF_GLOB).map(([path, url]) => ({
         filename: path.split('/').pop() ?? path,
-        url: url as string,
+        // Strip leading /public so the URL resolves to /8130s/file.pdf
+        url: (url as string).replace(/^\/public\//, '/'),
     })).sort((a, b) => a.filename.localeCompare(b.filename));
 }
 
