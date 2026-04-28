@@ -279,12 +279,10 @@ export const LabelPrinter: React.FC<LabelPrinterProps> = ({
         setEditingId(`manual-${Date.now()}`);
     };
 
-    // ── Build and open print window ────────────────────────────────────────
-    const handlePrint = () => {
-        const win = window.open('', '_blank', 'width=900,height=700');
-        if (!win) return;
+    // ── Print via hidden iframe — no popup blocker issues ──────────────────
+    const printFrameRef = React.useRef<HTMLIFrameElement>(null);
 
-        // Render all labels as HTML
+    const handlePrint = () => {
         const labelsHtml = labels.map(l => `
             <div class="label-card">
                 <div class="label-header">
@@ -293,7 +291,7 @@ export const LabelPrinter: React.FC<LabelPrinterProps> = ({
                 <div class="label-divider"></div>
                 <div class="label-field">
                     <div class="label-field-name">Part Number</div>
-                    <div class="label-field-value label-value-large" style="font-family:monospace">${l.partNumber || '—'}</div>
+                    <div class="label-field-value label-value-large font-mono">${l.partNumber || '—'}</div>
                 </div>
                 <div class="label-divider"></div>
                 <div class="label-field">
@@ -303,7 +301,7 @@ export const LabelPrinter: React.FC<LabelPrinterProps> = ({
                 <div class="label-divider"></div>
                 <div class="label-field">
                     <div class="label-field-name">Location</div>
-                    <div class="label-field-value label-value-large" style="font-family:monospace">${l.location || '—'}</div>
+                    <div class="label-field-value label-value-large font-mono">${l.location || '—'}</div>
                 </div>
                 ${showExtra && (l.condition || l.qty) ? `
                 <div class="label-divider"></div>
@@ -314,34 +312,23 @@ export const LabelPrinter: React.FC<LabelPrinterProps> = ({
             </div>
         `).join('');
 
-        win.document.write(`
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <title>${orgName} — Part Labels (${labels.length})</title>
-                <style>
-                    ${LABEL_CSS}
-                    ${PRINT_PAGE_CSS}
-                </style>
-            </head>
-            <body>
-                <div class="no-print" style="padding:12px 16px; background:#f5f5f5; border-bottom:1px solid #ddd; display:flex; align-items:center; gap:16px; font-family:Arial,sans-serif; font-size:13px;">
-                    <strong>${labels.length} label${labels.length !== 1 ? 's' : ''}</strong>
-                    <button onclick="window.print()" style="padding:7px 20px; background:#0284c7; color:#fff; border:none; border-radius:5px; cursor:pointer; font-size:13px; font-weight:600;">
-                        🖨 Print Labels
-                    </button>
-                    <span style="color:#666;">2 per row · letter paper · Avery 5163 compatible</span>
-                    <button onclick="window.close()" style="margin-left:auto; padding:6px 14px; background:#eee; border:1px solid #ccc; border-radius:5px; cursor:pointer; font-size:13px;">Close</button>
-                </div>
-                <div style="padding:0.35in;">
-                    <div class="labels-grid">
-                        ${labelsHtml}
-                    </div>
-                </div>
-            </body>
-            </html>
-        `);
-        win.document.close();
+        const html = `<!DOCTYPE html><html><head><title>Labels</title>
+            <style>
+                ${LABEL_CSS} ${PRINT_PAGE_CSS}
+                body { margin: 0; }
+                .labels-grid { display: grid; grid-template-columns: repeat(2, 3.8in); gap: 0.2in; padding: 0.35in; }
+            </style>
+        </head><body><div class="labels-grid">${labelsHtml}</div></body></html>`;
+
+        const frame = printFrameRef.current;
+        if (!frame) return;
+        const doc = frame.contentDocument || frame.contentWindow?.document;
+        if (!doc) return;
+        doc.open();
+        doc.write(html);
+        doc.close();
+        // Small delay to let images render before printing
+        setTimeout(() => { frame.contentWindow?.print(); }, 400);
     };
 
     if (!isOpen) return null;

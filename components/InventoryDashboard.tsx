@@ -17,8 +17,6 @@ import { FormArchive } from './FormArchive.tsx';
 import { LabelPrinter } from './LabelPrinter.tsx';
 import { LocalPdfLibrary } from './LocalPdfLibrary.tsx';
 import { PartEditModal } from './PartEditModal.tsx';
-import { FixedSizeList as List } from 'react-window';
-import AutoSizer from 'react-virtualized-auto-sizer';
 import { FilterPanel, FilterConfig, FilterValue } from './FilterPanel.tsx';
 import { useToast } from '../contexts/ToastContext.tsx';
 
@@ -187,25 +185,20 @@ const InventoryTab: React.FC<{
         });
     }, []);
 
-    // ── FIXED: Row uses a stable ref to avoid stale closure in react-window ──
-    const Row = useCallback(({ index, style }: { index: number; style: React.CSSProperties }) => {
-        const p       = filtered[index];
-        const isLow   = p.qty_on_hand <= p.reorder_level;
-        const isQuar  = p.quarantine_status === 'quarantined';
-        const form    = p.form_8130_id ? forms.find(f => f.id === p.form_8130_id) : null;
-        const isSel   = selectedIds.has(p.id);
-
+    const renderRow = (p: InventoryItem) => {
+        const isLow  = p.qty_on_hand <= p.reorder_level;
+        const isQuar = p.quarantine_status === 'quarantined';
+        const form   = p.form_8130_id ? forms.find(f => f.id === p.form_8130_id) : null;
+        const isSel  = selectedIds.has(p.id);
         return (
-            <div style={style}
-                className={`grid grid-cols-[36px_1.4fr_2.5fr_0.7fr_0.6fr_0.6fr_0.7fr_1.2fr_0.8fr_0.8fr] gap-x-2 items-center px-3 border-t border-white/5 transition-colors text-sm cursor-pointer
-                    ${isSel    ? 'bg-sky-500/8' : ''}
-                    ${isQuar   ? 'bg-amber-500/5' : isLow ? 'bg-orange-500/5' : ''}
-                    hover:bg-white/3`}
+            <div key={p.id}
+                className={`grid grid-cols-[36px_1.4fr_2.5fr_0.6fr_0.55fr_0.55fr_0.9fr_0.8fr_1fr] gap-x-2 items-center px-3 py-2.5 border-t border-white/5 text-sm cursor-pointer transition-colors
+                    ${isSel  ? 'bg-sky-500/8' : ''}
+                    ${isQuar ? 'bg-amber-500/5' : isLow ? 'bg-orange-500/5' : 'hover:bg-white/3'}`}
                 onClick={() => toggleSelect(p.id)}
             >
                 <div className="flex justify-center" onClick={e => e.stopPropagation()}>
-                    <input type="checkbox" checked={isSel}
-                        onChange={() => toggleSelect(p.id)}
+                    <input type="checkbox" checked={isSel} onChange={() => toggleSelect(p.id)}
                         className="accent-sky-500 cursor-pointer w-3.5 h-3.5" />
                 </div>
                 <div className="font-mono text-sky-300 font-medium truncate">{p.part_no}</div>
@@ -234,7 +227,7 @@ const InventoryTab: React.FC<{
                         </button>
                     )}
                     <button onClick={() => setEditPart(p)}
-                        className="p-1 text-slate-500 hover:text-white transition-colors" title="Edit part">
+                        className="p-1 text-slate-500 hover:text-white transition-colors" title="Edit">
                         <PencilIcon className="w-3.5 h-3.5" />
                     </button>
                     <button onClick={() => onPrintLabel([p.id])}
@@ -244,8 +237,7 @@ const InventoryTab: React.FC<{
                 </div>
             </div>
         );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [filtered, selectedIds, forms, toggleSelect]);
+    };
 
     const SortHdr: React.FC<{ k: keyof InventoryItem; label: string; cls?: string }> = ({ k, label, cls = '' }) => (
         <div onClick={() => toggleSort(k)} className={`flex items-center gap-1 cursor-pointer hover:text-white transition-colors select-none ${cls}`}>
@@ -317,7 +309,7 @@ const InventoryTab: React.FC<{
             {/* Table */}
             <div className="bg-white/3 border border-white/8 rounded-xl overflow-hidden flex-1 flex flex-col min-h-0">
                 {/* Header */}
-                <div className="grid grid-cols-[36px_1.4fr_2.5fr_0.7fr_0.6fr_0.6fr_0.7fr_1.2fr_0.8fr_0.8fr] gap-x-2 px-3 py-3 bg-white/5 text-[10px] font-mono font-semibold text-slate-400 uppercase tracking-wider flex-shrink-0 border-b border-white/5">
+                <div className="grid grid-cols-[36px_1.4fr_2.5fr_0.6fr_0.55fr_0.55fr_0.9fr_0.8fr_1fr] gap-x-2 px-3 py-3 bg-white/5 text-[10px] font-mono font-semibold text-slate-400 uppercase tracking-wider flex-shrink-0 border-b border-white/5">
                     <div className="flex justify-center">
                         <input type="checkbox"
                             checked={selectedIds.size === filtered.length && filtered.length > 0}
@@ -338,20 +330,11 @@ const InventoryTab: React.FC<{
                 </div>
 
                 {/* Virtualized rows */}
-                <div className="flex-1 min-h-0">
-                    <AutoSizer>
-                        {({ height, width }) =>
-                            filtered.length > 0 ? (
-                                <List height={height} itemCount={filtered.length} itemSize={44} width={width}>
-                                    {Row}
-                                </List>
-                            ) : (
-                                <div className="flex items-center justify-center h-full text-slate-600 text-sm italic">
-                                    No parts match filters
-                                </div>
-                            )
-                        }
-                    </AutoSizer>
+                <div className="overflow-y-auto" style={{ maxHeight: 'calc(100vh - 360px)' }}>
+                    {filtered.length > 0
+                        ? filtered.map(renderRow)
+                        : <div className="flex items-center justify-center py-16 text-slate-600 text-sm italic">No parts match filters</div>
+                    }
                 </div>
             </div>
 

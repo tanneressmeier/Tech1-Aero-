@@ -370,7 +370,13 @@ const App: React.FC = () => {
     };
 
     const handleReceivePart = (form: Form8130, newItemPartial: Partial<InventoryItem>) => {
-        dispatch({ type: 'ADD_FORM_8130', payload: form });
+        // Only add the form if it doesn't already exist (AI scan may have already added it)
+        const formExists = state.forms8130.some(f => f.id === form.id);
+        if (formExists) {
+            dispatch({ type: 'UPDATE_FORM_8130', payload: { ...form, inventory_item_id: newItemPartial.id, shelf_location: newItemPartial.shelf_location } });
+        } else {
+            dispatch({ type: 'ADD_FORM_8130', payload: form });
+        }
         const newItem: InventoryItem = {
             id:                    newItemPartial.id ?? `part-${Date.now()}`,
             part_no:               newItemPartial.part_no ?? '',
@@ -390,8 +396,22 @@ const App: React.FC = () => {
             form_8130_id:          form.id,
             certification:         newItemPartial.certification,
         };
-        dispatch({ type: 'UPDATE_FORM_8130', payload: { ...form, inventory_item_id: newItem.id } });
-        dispatch({ type: 'ADD_INVENTORY_ITEM', payload: newItem });
+        // Only add inventory item if one doesn't already exist for this form
+        const itemExists = state.partsInventory.some(p => p.form_8130_id === form.id);
+        if (!itemExists) {
+            dispatch({ type: 'UPDATE_FORM_8130', payload: { ...form, inventory_item_id: newItem.id } });
+            dispatch({ type: 'ADD_INVENTORY_ITEM', payload: newItem });
+        } else {
+            // Update shelf location on existing item
+            const existing = state.partsInventory.find(p => p.form_8130_id === form.id);
+            if (existing) {
+                dispatch({ type: 'SET_PARTS_INVENTORY', payload: state.partsInventory.map(p =>
+                    p.form_8130_id === form.id
+                        ? { ...p, shelf_location: newItemPartial.shelf_location ?? p.shelf_location }
+                        : p
+                )});
+            }
+        }
     };
 
     const handleAddTechnician = async (techData: Omit<Technician, 'id' | 'role'>) => {
