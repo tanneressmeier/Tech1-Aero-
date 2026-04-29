@@ -2,7 +2,7 @@ import {
     Aircraft, OptimizedSchedule, WorkOrder, RepairOrder, Technician,
     InventoryItem, Tool, PurchaseOrder, TimeLog, MaintenanceForecast,
     Notification, Kit, AircraftToolData, ComparisonResult,
-    Form8130, CheckoutRecord,
+    Form8130, CheckoutRecord, TrainingRequirement,
 } from '../types.ts';
 
 export interface AppState {
@@ -19,8 +19,9 @@ export interface AppState {
     generalTimeLogs: TimeLog[];
     activeTimeLogs:  TimeLog[];
     notifications:   Notification[];
-    forms8130:       Form8130[];
-    checkoutRecords: CheckoutRecord[];
+    forms8130:            Form8130[];
+    checkoutRecords:      CheckoutRecord[];
+    trainingRequirements: TrainingRequirement[];
 
     // ── Unified tooling slice (Phase 1 addition) ──────────────────────────
     tools:             Tool[];            // master tool inventory
@@ -66,4 +67,9 @@ export type AppAction =
     | { type: 'ADD_FORM_8130';          payload: Form8130 }
     | { type: 'UPDATE_FORM_8130';       payload: Form8130 }
     | { type: 'ADD_CHECKOUT_RECORD';    payload: CheckoutRecord }
-    | { type: 'ADD_INVENTORY_ITEM';     payload: InventoryItem };
+    | { type: 'ADD_INVENTORY_ITEM';     payload: InventoryItem }
+    // ── Training requirements ─────────────────────────────────────────────
+    | { type: 'SET_TRAINING_REQUIREMENTS'; payload: TrainingRequirement[] }
+    | { type: 'ADD_TRAINING_REQUIREMENT';  payload: TrainingRequirement }
+    | { type: 'UPDATE_TRAINING_REQUIREMENT'; payload: TrainingRequirement }
+    | { type: 'DELETE_TRAINING_REQUIREMENT'; payload: string };

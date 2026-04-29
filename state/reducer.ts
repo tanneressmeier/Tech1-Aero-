@@ -16,6 +16,7 @@ export const initialState: AppState = {
     notifications:    [],
     forms8130:        [],
     checkoutRecords:  [],
+    trainingRequirements: [],
     // Unified tooling slice
     tools:            [],
     toolKits:         [],
@@ -112,6 +113,15 @@ export const appReducer = (state: AppState, action: AppAction): AppState => {
             };
         case 'ADD_INVENTORY_ITEM':
             return { ...state, partsInventory: [...state.partsInventory, action.payload] };
+
+        case 'SET_TRAINING_REQUIREMENTS':
+            return { ...state, trainingRequirements: action.payload };
+        case 'ADD_TRAINING_REQUIREMENT':
+            return { ...state, trainingRequirements: [...state.trainingRequirements, action.payload] };
+        case 'UPDATE_TRAINING_REQUIREMENT':
+            return { ...state, trainingRequirements: state.trainingRequirements.map(r => r.id === action.payload.id ? action.payload : r) };
+        case 'DELETE_TRAINING_REQUIREMENT':
+            return { ...state, trainingRequirements: state.trainingRequirements.filter(r => r.id !== action.payload) };
 
         default:
             return state;

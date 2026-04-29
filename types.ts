@@ -63,10 +63,30 @@ export interface HangarConfig {
 }
 
 export interface TrainingRecord {
-    name:        string;   // e.g. "Fuel Cell Inspection", "Composite Repair", "RII Authorization"
-    completedDate: string; // ISO date
-    expiryDate?:  string;  // ISO date — if set, training expires
-    issuedBy?:   string;
+    name:          string;
+    completedDate: string;   // ISO date
+    expiryDate?:   string;   // ISO date — if set, training expires
+    issuedBy?:     string;
+    requirementId?: string;  // links back to TrainingRequirement.id
+    recurrenceIntervalDays?: number; // auto-calculated from requirement
+}
+
+// ---------------------------------------------------------------------------
+// TRAINING REQUIREMENT CATALOG
+// Defines required recurring trainings for the shop.
+// applicableTo: 'all' | 'leads_admins' | specific tech IDs
+// intervalDays: 0 = one-time, 365 = annual, 730 = biennial, etc.
+// ---------------------------------------------------------------------------
+export interface TrainingRequirement {
+    id:              string;
+    name:            string;
+    category:        'Safety' | 'Technical' | 'Regulatory' | 'Company';
+    description?:    string;
+    applicableTo:    'all' | 'leads_admins' | string[];   // tech IDs
+    intervalDays:    number;    // recurrence interval (0 = one-time)
+    isRequired:      boolean;
+    warningDays:     number;    // how many days before expiry to warn
+    issuedBy?:       string;    // default issuing authority
 }
 
 export interface Technician {

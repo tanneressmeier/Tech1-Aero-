@@ -725,6 +725,10 @@ const App: React.FC = () => {
                         .filter(l => l.technician_id === techId && !l.end_time)
                         .forEach(l => dispatch({ type: 'CLOCK_OUT_TASK', payload: { logId: l.log_id, endTime: new Date().toISOString() } }));
                 }}
+                trainingRequirements={state.trainingRequirements}
+                onAddRequirement={r  => dispatch({ type: 'ADD_TRAINING_REQUIREMENT',    payload: r })}
+                onUpdateRequirement={r => dispatch({ type: 'UPDATE_TRAINING_REQUIREMENT', payload: r })}
+                onDeleteRequirement={id => dispatch({ type: 'DELETE_TRAINING_REQUIREMENT', payload: id })}
             />;
             case 'purchase_orders': return <PurchaseOrderDashboard purchaseOrders={state.purchaseOrders} inventory={[...state.partsInventory, ...state.consumables]} onUpdatePurchaseOrder={handleUpdatePurchaseOrder} onReceiveFromPackingSlip={handleReceiveFromPackingSlip} onConfirmReception={handleConfirmReception} workOrders={state.workOrders} repairOrders={state.repairOrders} />;
             case 'data_migration': return <DataMigrationDashboard aircraftList={state.aircraftList} onImportData={() => {}} />;

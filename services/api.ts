@@ -11,6 +11,7 @@ import { MOCK_TECHNICIANS } from '../data/personnel.ts';
 import { MOCK_PARTS_INVENTORY, MOCK_CONSUMABLES_INVENTORY } from '../data/inventory.ts';
 import { MOCK_TOOLS } from '../data/tools.ts';
 import { MOCK_PURCHASE_ORDERS } from '../data/purchasing.ts';
+import { DEFAULT_TRAINING_CATALOG } from '../data/trainingCatalog.ts';
 
 
 // Helper to simulate network delay
@@ -69,6 +70,7 @@ export const api = {
           return logs;
       })(),
       activeTimeLogs: [],  // These are client-side
+      trainingRequirements: DEFAULT_TRAINING_CATALOG,
     }));
   },
 
