@@ -148,9 +148,12 @@ const InventoryTab: React.FC<{
     const [sortDir,     setSortDir]     = useState<'asc'|'desc'>('asc');
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
     const [filterOpen,  setFilterOpen]  = useState(false);
-    const [filters,     setFilters]     = useState<Record<string, FilterValue>>({ lowStock: 'all', storageArea: 'all', condition: 'all', quarantine: 'all' });
+    const [filters,     setFilters]     = useState<Record<string, FilterValue>>({ lowStock: 'all', storageArea: 'all', condition: 'all', quarantine: 'all', bin: 'all' });
     const [editPart,    setEditPart]    = useState<InventoryItem | null>(null);
     const [viewFormId,  setViewFormId]  = useState<string | null>(null);
+    // Inline bin editing: partId → draft bin string
+    const [editingBin,  setEditingBin]  = useState<string | null>(null);
+    const [binDraft,    setBinDraft]    = useState('');
 
     const filtered = useMemo(() => {
         const q = search.toLowerCase();
@@ -163,6 +166,7 @@ const InventoryTab: React.FC<{
                 if (filters.quarantine === 'quarantined' && p.quarantine_status !== 'quarantined') return false;
                 if (filters.quarantine === 'active'      && p.quarantine_status === 'quarantined') return false;
             }
+            if (filters.bin === 'unassigned' && p.shelf_location) return false;
             return true;
         }).sort((a, b) => {
             const av = a[sortKey], bv = b[sortKey];
@@ -209,7 +213,41 @@ const InventoryTab: React.FC<{
                 </div>
                 <div className={`font-semibold font-mono text-center ${isLow ? 'text-orange-400' : 'text-white'}`}>{p.qty_on_hand}</div>
                 <div className="text-slate-500 font-mono text-center">{p.reorder_level}</div>
-                <div className="text-slate-400 truncate text-xs font-mono">{p.shelf_location || <span className="text-slate-600 italic">no bin</span>}</div>
+                <div className="text-slate-400 truncate text-xs font-mono"
+                    onClick={e => e.stopPropagation()}>
+                    {editingBin === p.id ? (
+                        <input
+                            autoFocus
+                            value={binDraft}
+                            onChange={e => setBinDraft(e.target.value.toUpperCase())}
+                            onBlur={() => {
+                                if (binDraft.trim()) onUpdatePart({ ...p, shelf_location: binDraft.trim() });
+                                setEditingBin(null);
+                            }}
+                            onKeyDown={e => {
+                                if (e.key === 'Enter') {
+                                    if (binDraft.trim()) onUpdatePart({ ...p, shelf_location: binDraft.trim() });
+                                    setEditingBin(null);
+                                }
+                                if (e.key === 'Escape') setEditingBin(null);
+                            }}
+                            className="w-full bg-sky-500/10 border border-sky-500/40 rounded px-1.5 py-0.5 text-xs font-mono text-sky-200 focus:outline-none"
+                            placeholder="e.g. BJC01A02"
+                        />
+                    ) : (
+                        <button
+                            onClick={() => { setEditingBin(p.id); setBinDraft(p.shelf_location || ''); }}
+                            className={`w-full text-left px-1 py-0.5 rounded transition-colors hover:bg-white/8 ${
+                                p.shelf_location
+                                    ? 'text-slate-400'
+                                    : 'text-amber-500/70 italic'
+                            }`}
+                            title="Click to set bin location"
+                        >
+                            {p.shelf_location || '+ assign bin'}
+                        </button>
+                    )}
+                </div>
                 <div className="text-center">
                     {p.condition && (
                         <span className={`text-[9px] font-medium px-1.5 py-0.5 rounded border ${
@@ -251,6 +289,7 @@ const InventoryTab: React.FC<{
         { name: 'storageArea', label: 'Storage Area', type: 'select', options: [{ value: 'all', label: 'All' }, ...Array.from(new Set(parts.map(p => p.storage_area).filter(Boolean))).sort().map(a => ({ value: a!, label: a! }))] },
         { name: 'condition',   label: 'Condition',    type: 'select', options: [{ value: 'all', label: 'All' }, ...['New', 'Overhauled', 'Repaired', 'Inspected', 'Modified'].map(c => ({ value: c, label: c }))] },
         { name: 'quarantine',  label: 'Status',       type: 'select', options: [{ value: 'all', label: 'All' }, { value: 'active', label: 'Active' }, { value: 'quarantined', label: 'Quarantine' }] },
+        { name: 'bin',         label: 'Bin Location', type: 'select', options: [{ value: 'all', label: 'All' }, { value: 'unassigned', label: 'No Bin Assigned' }] },
     ], [parts]);
 
     return (
@@ -264,6 +303,18 @@ const InventoryTab: React.FC<{
                         className="w-full pl-9 pr-3 py-2 bg-white/5 border border-white/10 rounded-xl text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-sky-500" />
                 </div>
                 <ActionButton size="sm" onClick={() => setFilterOpen(true)} variant="secondary">Filters</ActionButton>
+                {parts.filter(p => !p.shelf_location).length > 0 && (
+                    <button
+                        onClick={() => setFilters(f => ({ ...f, bin: f.bin === 'unassigned' ? 'all' : 'unassigned' }))}
+                        className={`text-xs px-2.5 py-1.5 rounded-lg border transition-all font-medium ${
+                            filters.bin === 'unassigned'
+                                ? 'bg-amber-500/15 text-amber-200 border-amber-500/30'
+                                : 'text-amber-500/70 border-amber-500/25 hover:bg-amber-500/10'
+                        }`}
+                    >
+                        {filters.bin === 'unassigned' ? '✕ ' : ''}No Bin ({parts.filter(p => !p.shelf_location).length})
+                    </button>
+                )}
 
                 {selectedIds.size > 0 && (
                     <>
@@ -342,7 +393,7 @@ const InventoryTab: React.FC<{
             <FilterPanel isOpen={filterOpen} onClose={() => setFilterOpen(false)}
                 filters={filters} onFilterChange={(n, v) => setFilters(p => ({ ...p, [n]: v }))}
                 filterConfig={filterConfig}
-                onClearAll={() => setFilters({ lowStock: 'all', storageArea: 'all', condition: 'all', quarantine: 'all' })} />
+                onClearAll={() => setFilters({ lowStock: 'all', storageArea: 'all', condition: 'all', quarantine: 'all', bin: 'all' })} />
             <PartEditModal isOpen={!!editPart} onClose={() => setEditPart(null)} part={editPart}
                 onSave={p => { onUpdatePart(p); setEditPart(null); }} />
 

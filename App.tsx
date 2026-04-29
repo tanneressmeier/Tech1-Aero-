@@ -7,6 +7,10 @@ import { AppState, AppAction } from './state/types.ts';
 
 // API and services
 import { api } from './services/api.ts';
+import {
+    loadWarehouseForms, loadWarehouseParts, loadWarehouseCheckouts,
+    upsertForm, upsertPart, saveWarehouseForms, saveWarehouseParts, saveWarehouseCheckouts,
+} from './services/warehouseStore.ts';
 import { getSearchIntent, SearchIntent, generateOptimalSchedule, analyzeMaintenanceHistory } from './services/geminiService.ts';
 import { useWebSocket } from './hooks/useWebSocket.ts';
 import { useToast } from './contexts/ToastContext.tsx';
@@ -123,7 +127,24 @@ const App: React.FC = () => {
         const loadData = async () => {
             try {
                 const data = await api.fetchAllData();
-                dispatch({ type: 'SET_ALL_DATA', payload: data });
+                // Merge persisted warehouse data (survives page refresh)
+                const savedForms     = loadWarehouseForms();
+                const savedParts     = loadWarehouseParts();
+                const savedCheckouts = loadWarehouseCheckouts();
+                dispatch({
+                    type: 'SET_ALL_DATA',
+                    payload: {
+                        ...data,
+                        forms8130:       savedForms,
+                        checkoutRecords: savedCheckouts,
+                        // Merge: seed parts first, then warehouse-scanned parts on top
+                        // (warehouse parts override if same id)
+                        partsInventory: [
+                            ...data.partsInventory.filter(p => !savedParts.some(s => s.id === p.id)),
+                            ...savedParts,
+                        ],
+                    },
+                });
             } catch (error) {
                 console.error("Failed to fetch initial data", error);
                 showToast({ message: "Failed to load application data. Is the backend running?", type: 'error' });
@@ -370,49 +391,129 @@ const App: React.FC = () => {
     };
 
     const handleReceivePart = (form: Form8130, newItemPartial: Partial<InventoryItem>) => {
-        // Only add the form if it doesn't already exist (AI scan may have already added it)
         const formExists = state.forms8130.some(f => f.id === form.id);
+        const itemExists = state.partsInventory.some(p => p.form_8130_id === form.id);
+
+        // Build the inventory item (always, whether new or update)
+        const existingItem = state.partsInventory.find(p => p.form_8130_id === form.id);
+        const itemId = existingItem?.id ?? newItemPartial.id ?? `part-ws-${Date.now()}`;
+
+        const inventoryItem: InventoryItem = {
+            id:                    itemId,
+            part_no:               newItemPartial.part_no               ?? form.block6_part_no    ?? '',
+            sku:                   newItemPartial.sku                   ?? form.block6_part_no    ?? '',
+            description:           newItemPartial.description           ?? form.block6_description ?? '',
+            qty_on_hand:           newItemPartial.qty_on_hand           ?? form.block9_quantity    ?? 0,
+            qty_reserved:          existingItem?.qty_reserved           ?? 0,
+            reorder_level:         existingItem?.reorder_level          ?? 1,
+            shelf_location:        newItemPartial.shelf_location        ?? existingItem?.shelf_location ?? '',
+            storage_area:          newItemPartial.storage_area          ?? existingItem?.storage_area   ?? 'General',
+            procurement_lead_time: 7,
+            unit:                  'EA',
+            suppliers:             existingItem?.suppliers              ?? [],
+            quarantine_status:     'active',
+            condition:             (newItemPartial.condition            ?? form.block11_condition  ?? existingItem?.condition) as InventoryItem['condition'],
+            form_tracking_no:      newItemPartial.form_tracking_no      ?? form.block5_tracking_no ?? existingItem?.form_tracking_no,
+            form_8130_id:          form.id,
+            certification: {
+                type:     '8130-3',
+                verified: true,
+                number:   form.block5_tracking_no || form.block13b_cert_no || undefined,
+            },
+        };
+
+        // Update / add form with inventory link
+        const updatedForm: Form8130 = {
+            ...form,
+            inventory_item_id: itemId,
+            shelf_location:    inventoryItem.shelf_location || form.shelf_location,
+        };
+
         if (formExists) {
-            dispatch({ type: 'UPDATE_FORM_8130', payload: { ...form, inventory_item_id: newItemPartial.id, shelf_location: newItemPartial.shelf_location } });
+            dispatch({ type: 'UPDATE_FORM_8130',   payload: updatedForm });
+        } else {
+            dispatch({ type: 'ADD_FORM_8130',      payload: updatedForm });
+        }
+
+        if (itemExists) {
+            dispatch({ type: 'SET_PARTS_INVENTORY', payload: state.partsInventory.map(p =>
+                p.id === itemId ? inventoryItem : p
+            )});
+        } else {
+            dispatch({ type: 'ADD_INVENTORY_ITEM', payload: inventoryItem });
+        }
+
+        // ── Persist to localStorage ──────────────────────────────────────────
+        // Persist the form
+        const updatedForms = formExists
+            ? state.forms8130.map(f => f.id === form.id ? updatedForm : f)
+            : [...state.forms8130, updatedForm];
+        saveWarehouseForms(updatedForms);
+
+        // Persist the inventory item (warehouse parts only — not seed data)
+        upsertPart(inventoryItem);
+    };
+
+    // Persist form edits (archive) AND auto-create InventoryItem when a new form is scanned
+    const handleUpdateForm = (form: Form8130) => {
+        const exists = state.forms8130.some(f => f.id === form.id);
+        if (exists) {
+            dispatch({ type: 'UPDATE_FORM_8130', payload: form });
         } else {
             dispatch({ type: 'ADD_FORM_8130', payload: form });
         }
-        const newItem: InventoryItem = {
-            id:                    newItemPartial.id ?? `part-${Date.now()}`,
-            part_no:               newItemPartial.part_no ?? '',
-            sku:                   newItemPartial.sku ?? newItemPartial.part_no ?? '',
-            description:           newItemPartial.description ?? '',
-            qty_on_hand:           newItemPartial.qty_on_hand ?? 0,
-            qty_reserved:          0,
-            reorder_level:         1,
-            shelf_location:        newItemPartial.shelf_location ?? '',
-            storage_area:          newItemPartial.storage_area ?? 'General',
-            procurement_lead_time: 7,
-            unit:                  'EA',
-            suppliers:             [],
-            quarantine_status:     'active',
-            condition:             newItemPartial.condition,
-            form_tracking_no:      newItemPartial.form_tracking_no,
-            form_8130_id:          form.id,
-            certification:         newItemPartial.certification,
-        };
-        // Only add inventory item if one doesn't already exist for this form
-        const itemExists = state.partsInventory.some(p => p.form_8130_id === form.id);
-        if (!itemExists) {
-            dispatch({ type: 'UPDATE_FORM_8130', payload: { ...form, inventory_item_id: newItem.id } });
+        // Persist form to localStorage
+        const updatedForms = exists
+            ? state.forms8130.map(f => f.id === form.id ? form : f)
+            : [...state.forms8130, form];
+        saveWarehouseForms(updatedForms);
+
+        // Auto-create InventoryItem when a new form is scanned (not already linked)
+        if (!exists && form.block6_part_no && !state.partsInventory.some(p => p.form_8130_id === form.id)) {
+            const newItem: InventoryItem = {
+                id:                    `part-${form.id}`,
+                part_no:               form.block6_part_no,
+                sku:                   form.block6_part_no,
+                description:           form.block6_description || form.block6_part_no,
+                qty_on_hand:           form.block9_quantity ?? 1,
+                qty_reserved:          0,
+                reorder_level:         1,
+                shelf_location:        '',          // TBD — user assigns via bin editor
+                storage_area:          'Receiving', // Default area until bin is set
+                procurement_lead_time: 7,
+                unit:                  'EA',
+                suppliers:             [],
+                quarantine_status:     'active',
+                condition:             (form.block11_condition && form.block11_condition !== 'Unknown')
+                                           ? form.block11_condition as InventoryItem['condition']
+                                           : undefined,
+                form_tracking_no:      form.block5_tracking_no || undefined,
+                form_8130_id:          form.id,
+                certification: {
+                    type:     '8130-3',
+                    verified: !!form.release_inspection,
+                    number:   form.block5_tracking_no || form.block13b_cert_no || undefined,
+                },
+            };
             dispatch({ type: 'ADD_INVENTORY_ITEM', payload: newItem });
-        } else {
-            // Update shelf location on existing item
-            const existing = state.partsInventory.find(p => p.form_8130_id === form.id);
-            if (existing) {
-                dispatch({ type: 'SET_PARTS_INVENTORY', payload: state.partsInventory.map(p =>
-                    p.form_8130_id === form.id
-                        ? { ...p, shelf_location: newItemPartial.shelf_location ?? p.shelf_location }
-                        : p
-                )});
-            }
+            // Update form with linked inventory item id
+            const linkedForm = { ...form, inventory_item_id: newItem.id };
+            dispatch({ type: 'UPDATE_FORM_8130', payload: linkedForm });
+            saveWarehouseForms(updatedForms.map(f => f.id === form.id ? linkedForm : f));
+            upsertPart(newItem);
         }
     };
+
+    // Persist bin location update from BinAssignPanel
+    const handleUpdatePartLocation = (partId: string, shelf_location: string, storage_area: string) => {
+        const updated = state.partsInventory.map(p =>
+            p.id === partId ? { ...p, shelf_location, storage_area } : p
+        );
+        dispatch({ type: 'SET_PARTS_INVENTORY', payload: updated });
+        const part = updated.find(p => p.id === partId);
+        if (part) upsertPart(part);
+    };
+
 
     const handleAddTechnician = async (techData: Omit<Technician, 'id' | 'role'>) => {
         try {
@@ -596,14 +697,7 @@ const App: React.FC = () => {
                 onUpdatePart={handleUpdatePart}
                 onUpdateConsumable={handleUpdatePart}
                 onReceive={handleReceivePart}
-                onUpdateForm={f => {
-                    // If the form already exists, update it; otherwise add it (from LocalPdfLibrary AI scan)
-                    if (state.forms8130.some(existing => existing.id === f.id)) {
-                        dispatch({ type: 'UPDATE_FORM_8130', payload: f });
-                    } else {
-                        dispatch({ type: 'ADD_FORM_8130', payload: f });
-                    }
-                }}
+                onUpdateForm={handleUpdateForm}
             />;
             case 'consumables': return <ConsumablesDashboard consumables={state.consumables} onUpdateConsumable={handleUpdateConsumable} onCreatePurchaseOrder={(items) => { /* logic */ }} />;
             case 'personnel': return <PersonnelDashboard
