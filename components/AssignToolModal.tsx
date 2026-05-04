@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Tool } from '../types.ts';
 import { SidePanel } from './SidePanel.tsx';
 import { ExclamationTriangleIcon, CheckBadgeIcon } from './icons.tsx';
+import { useFormModal } from '../hooks/useFormModal.ts';
 
 interface AssignToolModalProps {
     isOpen: boolean;
@@ -26,6 +27,7 @@ export const AssignToolModal: React.FC<AssignToolModalProps> = ({ isOpen, onClos
     const [searchTerm,     setSearchTerm]     = useState('');
     const [selectedToolId, setSelectedToolId] = useState<string | null>(null);
     const [showBlocked,    setShowBlocked]     = useState(false);
+    const { isSubmitting, handleSubmit } = useFormModal(onClose);
 
     const filteredTools = useMemo(() => {
         const q = searchTerm.toLowerCase();
@@ -40,13 +42,12 @@ export const AssignToolModal: React.FC<AssignToolModalProps> = ({ isOpen, onClos
     const selectedTool = tools.find(t => t.id === selectedToolId);
     const selectedCal  = selectedTool ? getCalStatus(selectedTool) : null;
 
-    const handleSubmit = (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!selectedToolId) return;
+    const onSubmit = handleSubmit(() => {
+        if (!selectedToolId) throw new Error('Please select a tool.');
         onAssignTool(selectedToolId);
         setSelectedToolId(null);
         setSearchTerm('');
-    };
+    });
 
     if (!isOpen) return null;
 
@@ -71,7 +72,7 @@ export const AssignToolModal: React.FC<AssignToolModalProps> = ({ isOpen, onClos
                             className="bg-slate-600 hover:bg-slate-500 text-white font-bold py-2 px-4 rounded-md text-sm">
                             Cancel
                         </button>
-                        <button type="submit" form="assign-tool-form" disabled={!selectedToolId}
+                        <button type="submit" form="assign-tool-form" disabled={!selectedToolId || isSubmitting}
                             className="bg-sky-600 hover:bg-sky-500 disabled:bg-slate-600 disabled:cursor-not-allowed text-white font-bold py-2 px-4 rounded-md text-sm">
                             Assign Tool
                         </button>
@@ -79,7 +80,7 @@ export const AssignToolModal: React.FC<AssignToolModalProps> = ({ isOpen, onClos
                 </>
             }
         >
-            <form id="assign-tool-form" onSubmit={handleSubmit} className="flex flex-col h-full gap-3">
+            <form id="assign-tool-form" onSubmit={onSubmit} className="flex flex-col h-full gap-3">
                 <input
                     type="text"
                     value={searchTerm}

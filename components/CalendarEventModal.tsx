@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { BaseModal } from './BaseModal.tsx';
 import { WorkOrder, RepairOrder, Technician } from '../types.ts';
 import { UserPlusIcon, ChartBarIcon } from './icons.tsx';
+import { useFormModal } from '../hooks/useFormModal.ts';
 
 interface CalendarEventModalProps {
     isOpen: boolean;
@@ -17,6 +18,7 @@ interface CalendarEventModalProps {
 export const CalendarEventModal: React.FC<CalendarEventModalProps> = ({ isOpen, onClose, order, technicians, onSaveAssignments, onUpdateOrder, onNavigateToOrder }) => {
     const [selectedTechIds, setSelectedTechIds] = useState<Set<string>>(new Set());
     const [newDate, setNewDate] = useState('');
+    const { isSubmitting, runAction } = useFormModal(onClose);
 
     useEffect(() => {
         if (order) {
@@ -45,21 +47,15 @@ export const CalendarEventModal: React.FC<CalendarEventModalProps> = ({ isOpen, 
         });
     };
 
-    const handleSaveChanges = () => {
+    const handleSaveChanges = runAction(() => {
         const orderType = 'wo_id' in order ? 'WO' : 'RO';
         const orderId = 'wo_id' in order ? order.wo_id : order.ro_id;
-        
-        // Save technician assignments
         onSaveAssignments(orderType, orderId, Array.from(selectedTechIds));
-
-        // Save date change
         const updatedOrder = 'wo_id' in order
             ? { ...order, scheduled_date: newDate }
-            : { ...order, created_date: newDate }; // Note: updating created_date for ROs
+            : { ...order, created_date: newDate };
         onUpdateOrder(updatedOrder as WorkOrder | RepairOrder);
-
-        onClose();
-    };
+    });
 
     const handleOpenGantt = () => {
         const orderId = 'wo_id' in order ? order.wo_id : order.ro_id;
@@ -84,7 +80,7 @@ export const CalendarEventModal: React.FC<CalendarEventModalProps> = ({ isOpen, 
                     <button type="button" onClick={onClose} className="bg-slate-600 hover:bg-slate-500 text-white font-bold py-2 px-4 rounded-md transition-colors">
                         Cancel
                     </button>
-                    <button type="button" onClick={handleSaveChanges} className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-md transition-colors">
+                    <button type="button" onClick={handleSaveChanges} disabled={isSubmitting} className="bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-600 text-white font-bold py-2 px-4 rounded-md transition-colors">
                         Save Changes
                     </button>
                 </>

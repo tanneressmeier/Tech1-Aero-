@@ -12,6 +12,7 @@ import React, { useState, useEffect } from 'react';
 import { Technician, TimeLog, Squawk } from '../types.ts';
 import { SidePanel } from './SidePanel.tsx';
 import { ClockIcon, PlusIcon } from './icons.tsx';
+import { useFormModal } from '../hooks/useFormModal.ts';
 
 interface TimeLogModalProps {
     isOpen:      boolean;
@@ -39,6 +40,7 @@ export const TimeLogModal: React.FC<TimeLogModalProps> = ({
     const [endTime, setEndTime]       = useState('');
     const [notes, setNotes]           = useState('');
     const [elapsed, setElapsed]       = useState('');
+    const { isSubmitting, handleSubmit, runAction } = useFormModal(onClose);
 
     const isAdmin = currentUser.role === 'Admin' || currentUser.role === 'Lead Technician';
 
@@ -67,7 +69,7 @@ export const TimeLogModal: React.FC<TimeLogModalProps> = ({
         }
     }, [isOpen, currentUser.id]);
 
-    const handleClockIn = () => {
+    const handleClockIn = runAction(() => {
         onClockInToTask({
             technician_id: currentUser.id,
             start_time:    new Date().toISOString(),
@@ -77,17 +79,14 @@ export const TimeLogModal: React.FC<TimeLogModalProps> = ({
             order_type:    orderType,
             notes,
         });
-        onClose();
-    };
+    });
 
-    const handleClockOut = () => {
+    const handleClockOut = runAction(() => {
         if (!activeTaskLog) return;
         onClockOutOfTask(activeTaskLog.log_id, new Date().toISOString());
-        onClose();
-    };
+    });
 
-    const handleManualSubmit = (e: React.FormEvent) => {
-        e.preventDefault();
+    const onManualSubmit = handleSubmit(() => {
         onLogManual({
             technician_id: manualTechId,
             start_time:    new Date(startTime).toISOString(),
@@ -98,8 +97,7 @@ export const TimeLogModal: React.FC<TimeLogModalProps> = ({
             order_type:    orderType,
             notes,
         });
-        onClose();
-    };
+    });
 
     return (
         <SidePanel
@@ -120,7 +118,7 @@ export const TimeLogModal: React.FC<TimeLogModalProps> = ({
                                 className="px-4 py-2 text-sm bg-emerald-600 hover:bg-emerald-500 text-white font-medium rounded-lg transition-colors flex items-center gap-2">
                                 <ClockIcon className="w-4 h-4" /> Clock In to Task
                               </button>
-                        : <button type="submit" form="manual-log-form"
+                        : <button type="submit" form="manual-log-form" disabled={isSubmitting}
                             className="px-4 py-2 text-sm bg-sky-600 hover:bg-sky-500 text-white font-medium rounded-lg transition-colors flex items-center gap-2">
                             <PlusIcon className="w-4 h-4" /> Add Entry
                           </button>
@@ -176,7 +174,7 @@ export const TimeLogModal: React.FC<TimeLogModalProps> = ({
                     </div>
                 </div>
             ) : (
-                <form id="manual-log-form" onSubmit={handleManualSubmit} className="space-y-4">
+                <form id="manual-log-form" onSubmit={onManualSubmit} className="space-y-4">
                     {isAdmin && (
                         <div>
                             <label className="block text-xs text-slate-400 mb-1">Technician</label>

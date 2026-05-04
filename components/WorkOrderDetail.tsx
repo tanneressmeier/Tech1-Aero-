@@ -14,7 +14,7 @@ import { compareToolsClientSide } from '../services/geminiService.ts';
 import { ProfitabilityPanel } from './ProfitabilityPanel.tsx';
 import { computeWoCompletion } from '../utils/ganttEngine.ts';
 import { analyzeOrderBottlenecks } from '../utils/skillsEngine.ts';
-import { StatusBadge, PriorityBadge, MetaGrid, AlertBanner, TabBar, ActionButton } from './ui.tsx';
+import { StatusBadge, PriorityBadge, MetaGrid, AlertBanner, TabBar, ActionButton, SectionCard } from './ui.tsx';
 
 interface WorkOrderDetailProps {
     order: WorkOrder;
@@ -125,7 +125,7 @@ export const WorkOrderDetail: React.FC<WorkOrderDetailProps> = ({
             </div>
 
             {/* ── Order header card ── */}
-            <div className="bg-white/3 border border-white/8 rounded-xl p-5 flex-shrink-0 space-y-4">
+            <SectionCard className="flex-shrink-0 space-y-4">
                 {/* Title + status row */}
                 <div className="flex items-start justify-between gap-4">
                     <div>
@@ -194,7 +194,7 @@ export const WorkOrderDetail: React.FC<WorkOrderDetailProps> = ({
                         <ProfitabilityPanel  order={order} inventory={inventory} />
                     </div>
                 )}
-            </div>
+            </SectionCard>
 
                         {/* Squawk views */}
             <div className="flex-1 min-h-0">

@@ -1,8 +1,5 @@
 
 // services/api.ts
-// FIX: Reverted to a mock API implementation to resolve "Failed to fetch" errors.
-// This version simulates async API calls using the local mock data, allowing the
-// application to run without a live backend server.
 
 import { Aircraft, WorkOrder, RepairOrder, Technician, InventoryItem, Tool, PurchaseOrder } from '../types.ts';
 import { MOCK_AIRCRAFT_FLEET } from '../data/fleet.ts';
@@ -13,19 +10,51 @@ import { MOCK_TOOLS } from '../data/tools.ts';
 import { MOCK_PURCHASE_ORDERS } from '../data/purchasing.ts';
 import { DEFAULT_TRAINING_CATALOG } from '../data/trainingCatalog.ts';
 
-
-// Helper to simulate network delay
 const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
 
+// ── Generic CRUD helpers ────────────────────────────────────────────────────
+// Types whose primary key is not `.id` (WorkOrder, RepairOrder, PurchaseOrder)
+// use updateItemByKey. Everything else uses the two-arg updateItem.
+
+async function updateItem<T extends { id: string }>(collection: T[], item: T): Promise<T> {
+    await delay(200);
+    const index = collection.findIndex(i => i.id === item.id);
+    if (index > -1) collection[index] = item;
+    return item;
+}
+
+async function updateItemByKey<T, K extends keyof T>(collection: T[], item: T, key: K): Promise<T> {
+    await delay(200);
+    const index = collection.findIndex(i => i[key] === item[key]);
+    if (index > -1) collection[index] = item;
+    return item;
+}
+
+async function addItem<T extends { id: string }>(
+    collection: T[],
+    item: Omit<T, 'id'>,
+    prefix: string,
+): Promise<T> {
+    await delay(300);
+    const newItem = { ...item, id: `${prefix}-${Date.now()}` } as T;
+    collection.push(newItem);
+    return newItem;
+}
+
+async function deleteItem<T extends { id: string }>(collection: T[], id: string): Promise<null> {
+    await delay(200);
+    const index = collection.findIndex(i => i.id === id);
+    if (index > -1) collection.splice(index, 1);
+    return null;
+}
+
+// ── API surface ─────────────────────────────────────────────────────────────
+
 export const api = {
-  /**
-   * Fetches all initial data required for the application from the mock service.
-   */
   fetchAllData: async () => {
     console.log("API: Fetching all initial data from mock service...");
-    await delay(500); // Simulate network latency
+    await delay(500);
 
-    // The data is mutable, so return copies to prevent side effects between reloads/updates
     return JSON.parse(JSON.stringify({
       aircraftList: MOCK_AIRCRAFT_FLEET,
       workOrders: MOCK_WORK_ORDERS,
@@ -39,14 +68,11 @@ export const api = {
           const logs = [];
           const techs = ['tech-1','tech-2','tech-3','tech-5','tech-6'];
           const now = Date.now();
-          // Generate 60 days of historical time logs
           for (let day = 60; day >= 1; day--) {
               const dayMs = now - day * 86400000;
-              // Skip weekends
               const dow = new Date(dayMs).getDay();
               if (dow === 0 || dow === 6) continue;
               techs.forEach((techId, tidx) => {
-                  // Shop presence (8h non-billable)
                   logs.push({
                       log_id: `shop-${techId}-${day}`,
                       technician_id: techId,
@@ -54,7 +80,6 @@ export const api = {
                       end_time:   new Date(dayMs + 16*3600000).toISOString(),
                       is_billable: false,
                   });
-                  // Billable task time (varies by tech efficiency)
                   const billableHrs = 4 + (tidx % 3) + Math.floor(Math.random() * 3);
                   logs.push({
                       log_id: `bill-${techId}-${day}`,
@@ -69,111 +94,45 @@ export const api = {
           }
           return logs;
       })(),
-      activeTimeLogs: [],  // These are client-side
+      activeTimeLogs: [],
       trainingRequirements: DEFAULT_TRAINING_CATALOG,
     }));
   },
 
-  // --- CRUD Operations (Mocked) ---
+  // ── Aircraft ──────────────────────────────────────────────────────────────
+  updateAircraft:      (aircraft: Aircraft)              => updateItem(MOCK_AIRCRAFT_FLEET, aircraft),
 
-  updateAircraft: async (aircraft: Aircraft): Promise<Aircraft> => {
-    await delay(200);
-    console.log("API (mock): Updating aircraft", aircraft.id);
-    // In a real app, this would be persisted. For the mock, we just return the object.
-    const index = MOCK_AIRCRAFT_FLEET.findIndex(a => a.id === aircraft.id);
-    if (index > -1) MOCK_AIRCRAFT_FLEET[index] = aircraft;
-    return aircraft;
-  },
-
+  // ── Work Orders ───────────────────────────────────────────────────────────
   createWorkOrder: async (wo: Omit<WorkOrder, 'wo_id'>): Promise<WorkOrder> => {
     await delay(300);
     const newWo: WorkOrder = { ...wo, wo_id: `WO-MOCK-${Date.now()}` };
-    console.log("API (mock): Creating work order", newWo);
     MOCK_WORK_ORDERS.push(newWo);
     return newWo;
   },
-  updateWorkOrder: async (wo: WorkOrder): Promise<WorkOrder> => {
-    await delay(200);
-    console.log("API (mock): Updating work order", wo.wo_id);
-    const index = MOCK_WORK_ORDERS.findIndex(o => o.wo_id === wo.wo_id);
-    if (index > -1) MOCK_WORK_ORDERS[index] = wo;
-    return wo;
-  },
-  
+  updateWorkOrder:     (wo: WorkOrder)                   => updateItemByKey(MOCK_WORK_ORDERS, wo, 'wo_id'),
+
+  // ── Repair Orders ─────────────────────────────────────────────────────────
   createRepairOrder: async (ro: Omit<RepairOrder, 'ro_id'>): Promise<RepairOrder> => {
     await delay(300);
     const newRo: RepairOrder = { ...ro, ro_id: `RO-MOCK-${Date.now()}` };
-     console.log("API (mock): Creating repair order", newRo);
     MOCK_REPAIR_ORDERS.push(newRo);
     return newRo;
   },
-  updateRepairOrder: async (ro: RepairOrder): Promise<RepairOrder> => {
-    await delay(200);
-    console.log("API (mock): Updating repair order", ro.ro_id);
-    const index = MOCK_REPAIR_ORDERS.findIndex(o => o.ro_id === ro.ro_id);
-    if (index > -1) MOCK_REPAIR_ORDERS[index] = ro;
-    return ro;
-  },
+  updateRepairOrder:   (ro: RepairOrder)                 => updateItemByKey(MOCK_REPAIR_ORDERS, ro, 'ro_id'),
 
-  createTool: async (tool: Omit<Tool, 'id'>): Promise<Tool> => {
-    await delay(300);
-    const newTool: Tool = { ...tool, id: `tool-mock-${Date.now()}` };
-    console.log("API (mock): Creating tool", newTool);
-    MOCK_TOOLS.push(newTool);
-    return newTool;
-  },
-  updateTool: async (tool: Tool): Promise<Tool> => {
-    await delay(200);
-    console.log("API (mock): Updating tool", tool.id);
-    const index = MOCK_TOOLS.findIndex(t => t.id === tool.id);
-    if (index > -1) MOCK_TOOLS[index] = tool;
-    return tool;
-  },
-  deleteTool: async (toolId: string): Promise<null> => {
-    await delay(200);
-    console.log("API (mock): Deleting tool", toolId);
-    const index = MOCK_TOOLS.findIndex(t => t.id === toolId);
-    if (index > -1) MOCK_TOOLS.splice(index, 1);
-    return null; // For 204 No Content
-  },
+  // ── Tools ─────────────────────────────────────────────────────────────────
+  createTool:          (tool: Omit<Tool, 'id'>)          => addItem(MOCK_TOOLS, tool, 'tool-mock'),
+  updateTool:          (tool: Tool)                      => updateItem(MOCK_TOOLS, tool),
+  deleteTool:          (toolId: string)                  => deleteItem(MOCK_TOOLS, toolId),
 
-  updateConsumable: async (item: InventoryItem): Promise<InventoryItem> => {
-    await delay(200);
-    console.log("API (mock): Updating consumable", item.id);
-    const index = MOCK_CONSUMABLES_INVENTORY.findIndex(c => c.id === item.id);
-    if (index > -1) MOCK_CONSUMABLES_INVENTORY[index] = item;
-    return item;
-  },
+  // ── Inventory ─────────────────────────────────────────────────────────────
+  updateConsumable:    (item: InventoryItem)             => updateItem(MOCK_CONSUMABLES_INVENTORY, item),
+  updatePart:          (item: InventoryItem)             => updateItem(MOCK_PARTS_INVENTORY, item),
 
-  updatePart: async (item: InventoryItem): Promise<InventoryItem> => {
-    await delay(200);
-    console.log("API (mock): Updating part", item.id);
-    const index = MOCK_PARTS_INVENTORY.findIndex(p => p.id === item.id);
-    if (index > -1) MOCK_PARTS_INVENTORY[index] = item;
-    return item;
-  },
-  
-  createTechnician: async (tech: Omit<Technician, 'id'>): Promise<Technician> => {
-    await delay(300);
-    const newTech: Technician = { ...tech, id: `tech-mock-${Date.now()}` };
-    console.log("API (mock): Creating technician", newTech);
-    MOCK_TECHNICIANS.push(newTech);
-    return newTech;
-  },
+  // ── Technicians ───────────────────────────────────────────────────────────
+  createTechnician:    (tech: Omit<Technician, 'id'>)    => addItem(MOCK_TECHNICIANS, tech, 'tech-mock'),
+  updateTechnician:    (tech: Technician)                => updateItem(MOCK_TECHNICIANS, tech),
 
-  updateTechnician: async (tech: Technician): Promise<Technician> => {
-    await delay(200);
-    console.log("API (mock): Updating technician", tech.id);
-    const index = MOCK_TECHNICIANS.findIndex(t => t.id === tech.id);
-    if (index > -1) MOCK_TECHNICIANS[index] = tech;
-    return tech;
-  },
-  
-  updatePurchaseOrder: async (po: PurchaseOrder): Promise<PurchaseOrder> => {
-    await delay(200);
-    console.log("API (mock): Updating PO", po.po_id);
-    const index = MOCK_PURCHASE_ORDERS.findIndex(p => p.po_id === po.po_id);
-    if (index > -1) MOCK_PURCHASE_ORDERS[index] = po;
-    return po;
-  },
+  // ── Purchase Orders ───────────────────────────────────────────────────────
+  updatePurchaseOrder: (po: PurchaseOrder)               => updateItemByKey(MOCK_PURCHASE_ORDERS, po, 'po_id'),
 };

@@ -3,6 +3,7 @@ import { Technician, Squawk } from '../types.ts';
 import { SidePanel } from './SidePanel.tsx';
 import { MagnifyingGlassIcon, CheckBadgeIcon, ExclamationTriangleIcon, LockClosedIcon } from './icons.tsx';
 import { checkAuthorization } from '../utils/skillsEngine.ts';
+import { useFormModal } from '../hooks/useFormModal.ts';
 
 interface AssignTechnicianModalProps {
     isOpen:       boolean;
@@ -25,6 +26,7 @@ export const AssignTechnicianModal: React.FC<AssignTechnicianModalProps> = ({
 }) => {
     const [search, setSearch]         = useState('');
     const [showUnqualified, setShowUnqualified] = useState(false);
+    const { isSubmitting } = useFormModal(onClose);
 
     const techsWithAuth = useMemo(() =>
         technicians.map(t => ({

@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
-// FIX: Corrected import path for types by adding the file extension.
 import { WorkOrder, Aircraft } from '../types.ts';
-// FIX: Added .tsx extension to component import.
 import { XMarkIcon } from './icons.tsx';
+import { useFormModal } from '../hooks/useFormModal.ts';
 
 interface AddWorkOrderModalProps {
     isOpen: boolean;
@@ -15,36 +14,32 @@ export const AddWorkOrderModal: React.FC<AddWorkOrderModalProps> = ({ isOpen, on
     const [aircraftId, setAircraftId] = useState(aircraftList[0]?.id || '');
     const [visitName, setVisitName] = useState('');
     const [scheduledDate, setScheduledDate] = useState('');
+    const { isSubmitting, error, handleSubmit } = useFormModal(onClose);
 
     if (!isOpen) return null;
 
-    const handleSubmit = (e: React.FormEvent) => {
-        e.preventDefault();
+    const onSubmit = handleSubmit(() => {
         const aircraft = aircraftList.find(ac => ac.id === aircraftId);
         if (!aircraft || !visitName.trim() || !scheduledDate.trim()) {
-            alert('Please fill out all fields.');
-            return;
+            throw new Error('Please fill out all fields.');
         }
-
-        const newWO: Omit<WorkOrder, 'wo_id'> = {
+        onAdd({
             aircraft_id: aircraft.id,
             aircraft_tail_number: aircraft.tail_number,
             visit_name: visitName.trim(),
             scheduled_date: scheduledDate,
             status: 'Pending',
             priority: 'routine',
-            squawks: []
-        };
-        onAdd(newWO);
-        onClose();
+            squawks: [],
+        });
         setVisitName('');
         setScheduledDate('');
-    };
+    });
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center z-50" onClick={onClose}>
             <div className="bg-slate-800 rounded-lg shadow-xl w-full max-w-lg" onClick={e => e.stopPropagation()}>
-                <form onSubmit={handleSubmit}>
+                <form onSubmit={onSubmit}>
                     <div className="p-4 border-b border-slate-700 flex justify-between items-center">
                         <h2 className="text-xl font-bold">New Work Order</h2>
                         <button type="button" onClick={onClose}><XMarkIcon className="w-6 h-6" /></button>
@@ -66,8 +61,9 @@ export const AddWorkOrderModal: React.FC<AddWorkOrderModalProps> = ({ isOpen, on
                         </div>
                     </div>
                     <div className="p-4 bg-slate-900/50 flex justify-end gap-3">
+                        {error && <p className="text-sm text-red-400 self-center mr-auto">{error}</p>}
                         <button type="button" onClick={onClose}>Cancel</button>
-                        <button type="submit">Create Order</button>
+                        <button type="submit" disabled={isSubmitting}>Create Order</button>
                     </div>
                 </form>
             </div>

@@ -17,6 +17,7 @@ import { StatusBadge, AlertBanner, ActionButton } from './ui.tsx';
 import { Permissions } from '../hooks/usePermissions.ts';
 import { predictToolsFromJob } from '../services/geminiService.ts';
 import { useToast } from '../contexts/ToastContext.tsx';
+import { useAsyncAction } from '../hooks/useAsyncAction.ts';
 
 interface SquawkDetailViewProps {
     squawk:      Squawk;
@@ -50,19 +51,15 @@ export const SquawkDetailView: React.FC<SquawkDetailViewProps> = ({
     onUpdateOrder, permissions, activeTimeLogs = [], onClockInToTask, onClockOutOfTask,
 }) => {
     const { showToast } = useToast();
+    const suggestToolsAction = useAsyncAction();
     // Use passed currentUser, fall back gracefully
     const currentUser = currentUserProp ?? technicians.find(t => t.role === 'Admin') ?? technicians[0];
-    const [isTimeLogPanelOpen,    setIsTimeLogPanelOpen]    = useState(false);
-    const [isAssignPartPanelOpen, setIsAssignPartPanelOpen] = useState(false);
-    const [isAssignToolPanelOpen, setIsAssignToolPanelOpen] = useState(false);
-    const [isAssignTechPanelOpen, setIsAssignTechPanelOpen] = useState(false);
+    type SubPanel = 'timelog' | 'part' | 'tool' | 'tech' | null;
+    const [subPanel,              setSubPanel]              = useState<SubPanel>(null);
     const [isSquawkAdminModalOpen,setIsSquawkAdminModalOpen]= useState(false);
     const [isPanelOpen,           setIsPanelOpen]           = useState(false);
     const [isSignatureModalOpen,  setIsSignatureModalOpen]  = useState<keyof Squawk['signatures'] | null>(null);
-    const [isTroubleshootingModalOpen, setIsTroubleshootingModalOpen] = useState(false);
-    const [troubleshootingGuide,  setTroubleshootingGuide]  = useState('');
-    const [isTroubleshootingLoading, setIsTroubleshootingLoading] = useState(false);
-    const [isSuggestingTools,     setIsSuggestingTools]     = useState(false);
+    const [troubleshooting,       setTroubleshooting]       = useState({ open: false, loading: false, guide: '' });
     // Local draft for completion slider — only commits to state on pointer-up (prevents toast spam)
     const [draftPct, setDraftPct] = useState<number>(squawk.completion_percentage ?? 0);
     // Sync draft when squawk identity changes (switching between squawks)
@@ -102,7 +99,7 @@ export const SquawkDetailView: React.FC<SquawkDetailViewProps> = ({
 
     const handleAssignPart = (partId: string, quantity: number) => {
         handleUpdateSquawk({ ...squawk, used_parts: [...squawk.used_parts, { inventory_item_id: partId, quantity_used: quantity }] });
-        setIsAssignPartPanelOpen(false);
+        setSubPanel(null);
     };
 
     const handleAssignTech = (techId: string) => {
@@ -117,11 +114,11 @@ export const SquawkDetailView: React.FC<SquawkDetailViewProps> = ({
     const handleAssignTool = (toolId: string) => {
         if (squawk.used_tool_ids.includes(toolId)) {
             showToast({ message: 'Tool already assigned to this squawk.', type: 'info' });
-            setIsAssignToolPanelOpen(false);
+            setSubPanel(null);
             return;
         }
         handleUpdateSquawk({ ...squawk, used_tool_ids: [...squawk.used_tool_ids, toolId] });
-        setIsAssignToolPanelOpen(false);
+        setSubPanel(null);
         showToast({ message: `Tool assigned to squawk.`, type: 'success' });
     };
 
@@ -140,15 +137,13 @@ export const SquawkDetailView: React.FC<SquawkDetailViewProps> = ({
     };
 
     // ── AI: suggest tools from squawk description ────────────────────────────
-    const handleSuggestTools = async () => {
+    const handleSuggestTools = () => {
         if (!squawk.description.trim()) return;
-        setIsSuggestingTools(true);
-        try {
+        suggestToolsAction.run(async () => {
             const predicted = await predictToolsFromJob(
                 `${squawk.description} on ${aircraft.make} ${aircraft.model}`,
                 tools
             );
-            // Add predicted tools that exist in the master inventory by name match
             const norm = (s: string) => s.toLowerCase().replace(/[\s\-_.]/g, '');
             let added = 0;
             const newIds = [...squawk.used_tool_ids];
@@ -168,27 +163,24 @@ export const SquawkDetailView: React.FC<SquawkDetailViewProps> = ({
             } else {
                 showToast({ message: 'No inventory matches found for predicted tools. Try adding manually.', type: 'info' });
             }
-        } catch (err: any) {
-            showToast({ message: `AI error: ${err.message}`, type: 'error' });
-        } finally {
-            setIsSuggestingTools(false);
-        }
+        }, 'AI tool suggestion failed.');
     };
 
     const handleGenerateTroubleshootingGuide = async () => {
-        setIsTroubleshootingModalOpen(true);
-        setIsTroubleshootingLoading(true);
+        setTroubleshooting({ open: true, loading: true, guide: '' });
         await new Promise(res => setTimeout(res, 1800));
-        setTroubleshootingGuide(
-            `## Troubleshooting: ${squawk.description}\n\n` +
-            `Based on **${aircraft.make} ${aircraft.model}** and reported issue:\n\n` +
-            `1. **Visual Inspection** — Check for obvious signs of wear, damage, or loose connections.\n` +
-            `2. **Check Circuit Breakers** — Ensure all relevant circuit breakers are engaged.\n` +
-            `3. **Consult AMM** — Refer to the maintenance manual diagnostic flow charts.\n` +
-            `4. **Operational Check** — Follow the AMM procedure to test component functionality.\n\n` +
-            `**Common Causes:**\n- Faulty wiring harness connector\n- Internal component failure\n- Software configuration issue`
-        );
-        setIsTroubleshootingLoading(false);
+        setTroubleshooting({
+            open: true,
+            loading: false,
+            guide:
+                `## Troubleshooting: ${squawk.description}\n\n` +
+                `Based on **${aircraft.make} ${aircraft.model}** and reported issue:\n\n` +
+                `1. **Visual Inspection** — Check for obvious signs of wear, damage, or loose connections.\n` +
+                `2. **Check Circuit Breakers** — Ensure all relevant circuit breakers are engaged.\n` +
+                `3. **Consult AMM** — Refer to the maintenance manual diagnostic flow charts.\n` +
+                `4. **Operational Check** — Follow the AMM procedure to test component functionality.\n\n` +
+                `**Common Causes:**\n- Faulty wiring harness connector\n- Internal component failure\n- Software configuration issue`,
+        });
     };
 
     // ── Signature button sub-component ──────────────────────────────────────
@@ -420,7 +412,7 @@ export const SquawkDetailView: React.FC<SquawkDetailViewProps> = ({
                                 <p className="text-[10px] font-mono text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
                                     <UserGroupIcon className="w-3 h-3" /> Assigned Techs
                                 </p>
-                                <button onClick={() => setIsAssignTechPanelOpen(true)}
+                                <button onClick={() => setSubPanel('tech')}
                                     className="text-[10px] text-sky-400 hover:text-sky-300 flex items-center gap-0.5 transition-colors">
                                     <PlusIcon className="w-3 h-3" /> Assign
                                 </button>
@@ -450,11 +442,11 @@ export const SquawkDetailView: React.FC<SquawkDetailViewProps> = ({
                                     <WrenchIcon className="w-3 h-3" /> Tools
                                 </p>
                                 <div className="flex items-center gap-2">
-                                    <button onClick={handleSuggestTools} disabled={isSuggestingTools}
+                                    <button onClick={handleSuggestTools} disabled={suggestToolsAction.loading}
                                         className="text-[10px] text-purple-400 hover:text-purple-300 flex items-center gap-0.5 transition-colors disabled:opacity-40">
-                                        <SparklesIcon className="w-3 h-3" /> {isSuggestingTools ? '…' : 'AI'}
+                                        <SparklesIcon className="w-3 h-3" /> {suggestToolsAction.loading ? '…' : 'AI'}
                                     </button>
-                                    <button onClick={() => setIsAssignToolPanelOpen(true)}
+                                    <button onClick={() => setSubPanel('tool')}
                                         className="text-[10px] text-sky-400 hover:text-sky-300 flex items-center gap-0.5 transition-colors">
                                         <PlusIcon className="w-3 h-3" /> Add
                                     </button>
@@ -490,7 +482,7 @@ export const SquawkDetailView: React.FC<SquawkDetailViewProps> = ({
                                 <p className="text-[10px] font-mono text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
                                     <BeakerIcon className="w-3 h-3" /> Parts
                                 </p>
-                                <button onClick={() => setIsAssignPartPanelOpen(true)}
+                                <button onClick={() => setSubPanel('part')}
                                     className="text-[10px] text-sky-400 hover:text-sky-300 flex items-center gap-0.5 transition-colors">
                                     <PlusIcon className="w-3 h-3" /> Add
                                 </button>
@@ -574,7 +566,7 @@ export const SquawkDetailView: React.FC<SquawkDetailViewProps> = ({
                             }
                         </div>
                         {permissions.canEditBilling && (
-                            <button onClick={() => setIsTimeLogPanelOpen(true)}
+                            <button onClick={() => setSubPanel('timelog')}
                                 className="mt-2 w-full text-xs text-slate-500 hover:text-slate-300 border border-white/8 hover:border-white/15 rounded-lg py-1.5 transition-colors">
                                 + Manual Log Entry
                             </button>
@@ -602,8 +594,8 @@ export const SquawkDetailView: React.FC<SquawkDetailViewProps> = ({
 
             {/* Modals */}
             <TimeLogModal
-                isOpen={isTimeLogPanelOpen}
-                onClose={() => setIsTimeLogPanelOpen(false)}
+                isOpen={subPanel === 'timelog'}
+                onClose={() => setSubPanel(null)}
                 technicians={technicians}
                 currentUser={currentUser ?? technicians[0]}
                 squawk={squawk}
@@ -618,14 +610,14 @@ export const SquawkDetailView: React.FC<SquawkDetailViewProps> = ({
                 onClockOutOfTask={onClockOutOfTask ?? (() => {})}
                 onLogManual={handleLogTime}
             />
-            <AssignPartModal isOpen={isAssignPartPanelOpen} onClose={() => setIsAssignPartPanelOpen(false)} inventory={inventory} onAssignPart={handleAssignPart} />
-            <AssignToolModal isOpen={isAssignToolPanelOpen} onClose={() => setIsAssignToolPanelOpen(false)} tools={tools} onAssignTool={handleAssignTool} />
-            <AssignTechnicianModal isOpen={isAssignTechPanelOpen} onClose={() => setIsAssignTechPanelOpen(false)} technicians={technicians} assignedIds={squawk.assigned_technician_ids} squawk={squawk} onAssign={handleAssignTech} onUnassign={handleUnassignTech} />
+            <AssignPartModal isOpen={subPanel === 'part'} onClose={() => setSubPanel(null)} inventory={inventory} onAssignPart={handleAssignPart} />
+            <AssignToolModal isOpen={subPanel === 'tool'} onClose={() => setSubPanel(null)} tools={tools} onAssignTool={handleAssignTool} />
+            <AssignTechnicianModal isOpen={subPanel === 'tech'} onClose={() => setSubPanel(null)} technicians={technicians} assignedIds={squawk.assigned_technician_ids} squawk={squawk} onAssign={handleAssignTech} onUnassign={handleUnassignTech} />
             <SquawkAdminModal isOpen={isSquawkAdminModalOpen} onClose={() => setIsSquawkAdminModalOpen(false)} squawk={squawk} onSave={handleUpdateSquawk} />
             {isSignatureModalOpen && (
                 <SignatureConfirmationModal isOpen={!!isSignatureModalOpen} onClose={() => setIsSignatureModalOpen(null)} onConfirm={() => handleSign(isSignatureModalOpen)} signatureTypeLabel={isSignatureModalOpen.replace(/_/g, ' ')} />
             )}
-            <TroubleshootingGuideModal isOpen={isTroubleshootingModalOpen} onClose={() => setIsTroubleshootingModalOpen(false)} isLoading={isTroubleshootingLoading} guideContent={troubleshootingGuide} />
+            <TroubleshootingGuideModal isOpen={troubleshooting.open} onClose={() => setTroubleshooting(s => ({ ...s, open: false }))} isLoading={troubleshooting.loading} guideContent={troubleshooting.guide} />
         </>
     );
 };

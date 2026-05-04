@@ -14,6 +14,7 @@ import {
 import { getSearchIntent, SearchIntent, generateOptimalSchedule, analyzeMaintenanceHistory } from './services/geminiService.ts';
 import { useWebSocket } from './hooks/useWebSocket.ts';
 import { useToast } from './contexts/ToastContext.tsx';
+import { useAsyncAction } from './hooks/useAsyncAction.ts';
 import { usePermissions } from './hooks/usePermissions.ts';
 import { useSettings } from './contexts/SettingsContext.tsx';
 
@@ -21,6 +22,8 @@ import { useSettings } from './contexts/SettingsContext.tsx';
 import { View, Technician, WorkOrder, RepairOrder, Aircraft, OptimizedVisit, PurchaseOrder, PurchaseOrderItem, Squawk, StagedWorkOrder, StagedTool, StagedConsumable, ParsedPOHeader, ParsedPackingSlipItem, InventoryItem, Tool, TimeLog, Kit, Form8130, CheckoutRecord } from './types.ts';
 
 // Components
+import { AppSidebar, NavItem, NavGroup } from './components/AppSidebar.tsx';
+import { AppHeader } from './components/AppHeader.tsx';
 import { LoginScreen } from './components/LoginScreen.tsx';
 import { MissionControlDashboard } from './components/MissionControlDashboard.tsx';
 import { AircraftDashboard } from './components/AircraftDashboard.tsx';
@@ -35,14 +38,12 @@ import { PersonnelDashboard } from './components/PersonnelDashboard.tsx';
 import { PurchaseOrderDashboard } from './components/PurchaseOrderDashboard.tsx';
 import { DataMigrationDashboard } from './components/DataMigrationDashboard.tsx';
 import { CalendarView } from './components/CalendarView.tsx';
-import { GlobalSearchBar } from './components/GlobalSearchBar.tsx';
-import { NotificationCenter } from './components/NotificationCenter.tsx';
 import { AnalyticsDashboard } from './components/AnalyticsDashboard.tsx';
 import { ProfitabilityDashboard } from './components/ProfitabilityDashboard.tsx';
 import { SettingsModal } from './components/SettingsModal.tsx';
 import { ErrorBoundary } from './components/ErrorBoundary.tsx';
 
-// Icons
+// Icons (nav icons used by NAV_GROUPS)
 import {
   HomeIcon,
   PlaneIcon,
@@ -53,20 +54,13 @@ import {
   BeakerIcon,
   UsersIcon,
   ShoppingCartIcon,
-  CircleStackIcon,
   CalendarIcon,
-  ExclamationCircleIcon,
-  UserCircleIcon,
   ChartPieIcon,
   CurrencyDollarIcon,
 } from './components/icons.tsx';
 
 type DetailedView = 'work_order_detail' | 'repair_order_detail';
 type CurrentView = View | DetailedView;
-
-// Nav grouped by function — reduces 13 flat items to 3 logical groups
-type NavItem = { view: View; label: string; icon: React.FC<any>; adminOnly?: boolean };
-type NavGroup = { label: string; items: NavItem[] };
 
 const NAV_GROUPS: NavGroup[] = [
     {
@@ -107,13 +101,15 @@ const App: React.FC = () => {
     const [currentView, setCurrentView] = useState<CurrentView>('mission_control');
     const [selectedOrder, setSelectedOrder] = useState<{type: 'wo' | 'ro', id: string, initialView?: 'list' | 'board' | 'gantt'} | null>(null);
     const [initialFilters, setInitialFilters] = useState<SearchIntent['filters'] | null>(null);
-    const [isSearching, setIsSearching] = useState(false);
-    const [isAnalyzing, setIsAnalyzing] = useState(false);
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-    
+
     const { showToast } = useToast();
     const { settings } = useSettings();
     const permissions = usePermissions(currentUser);
+
+    const analyzeAction = useAsyncAction();
+    const searchAction  = useAsyncAction();
+    const apiAction     = useAsyncAction();
 
     const handleWebSocketMessage = useCallback((message: any) => {
         console.log('WebSocket message received:', message);
@@ -217,8 +213,8 @@ const App: React.FC = () => {
         setSelectedOrder(null);
     };
 
-    const handleUpdateOrder = async (order: WorkOrder | RepairOrder) => {
-        try {
+    const handleUpdateOrder = (order: WorkOrder | RepairOrder) =>
+        apiAction.run(async () => {
             if ('wo_id' in order) {
                 const updatedOrder = await api.updateWorkOrder(order);
                 dispatch({ type: 'SET_WORK_ORDERS', payload: state.workOrders.map(wo => wo.wo_id === updatedOrder.wo_id ? updatedOrder : wo) });
@@ -226,25 +222,15 @@ const App: React.FC = () => {
                 const updatedOrder = await api.updateRepairOrder(order);
                 dispatch({ type: 'SET_REPAIR_ORDERS', payload: state.repairOrders.map(ro => ro.ro_id === updatedOrder.ro_id ? updatedOrder : ro) });
             }
-            // No success toast here — this fires on every field edit (resolution notes,
-            // stage changes, slider) and would spam. Callers show their own toasts
-            // for explicit user actions (signatures, assignments, etc.)
-        } catch (error) {
-            console.error('Failed to update order:', error);
-            showToast({ message: 'Failed to save order changes.', type: 'error' });
-        }
-    };
+            // No success toast here — this fires on every field edit and would spam.
+        }, 'Failed to save order changes.');
 
-    const handleUpdateAircraft = async (updatedAircraft: Aircraft) => {
-        try {
+    const handleUpdateAircraft = (updatedAircraft: Aircraft) =>
+        apiAction.run(async () => {
             const returnedAircraft = await api.updateAircraft(updatedAircraft);
             dispatch({ type: 'SET_AIRCRAFT_LIST', payload: state.aircraftList.map(ac => ac.id === returnedAircraft.id ? returnedAircraft : ac) });
             showToast({ message: `Aircraft ${returnedAircraft.tail_number} updated.`, type: 'success' });
-        } catch (error) {
-            console.error("Failed to update aircraft:", error);
-            showToast({ message: 'Failed to update aircraft.', type: 'error' });
-        }
-    };
+        }, 'Failed to update aircraft.');
 
     const handleScheduleGenerated = (aircraftId: string, schedule: any) => {
         dispatch({ type: 'SET_SCHEDULES', payload: { ...state.schedules, [aircraftId]: schedule } });
@@ -253,93 +239,63 @@ const App: React.FC = () => {
         }
     };
 
-    const handleAnalyzeHistory = async (aircraft: Aircraft) => {
-        setIsAnalyzing(true);
-        try {
+    const handleAnalyzeHistory = (aircraft: Aircraft) =>
+        analyzeAction.run(async () => {
             const forecast = await analyzeMaintenanceHistory(aircraft);
             dispatch({ type: 'SET_FORECAST', payload: { aircraftId: aircraft.id, forecast } });
             showToast({ message: `Maintenance analysis complete for ${aircraft.tail_number}`, type: 'info' });
-        } catch (e: any) {
-            showToast({ message: e.message || "Failed to analyze history", type: 'error' });
-        } finally {
-            setIsAnalyzing(false);
-        }
-    };
+        }, 'Failed to analyze history.');
 
-    const handleCreateWorkOrderFromVisit = async (aircraft: Aircraft, visit: OptimizedVisit) => {
-        const newWOData: Omit<WorkOrder, 'wo_id'> = {
-            aircraft_id: aircraft.id,
-            aircraft_tail_number: aircraft.tail_number,
-            visit_name: visit.visitName,
-            scheduled_date: visit.scheduledDate,
-            status: "Pending",
-            priority: "routine",
-            squawks: [], // Should ideally be populated from visit events
-        };
-        try {
+    const handleCreateWorkOrderFromVisit = (aircraft: Aircraft, visit: OptimizedVisit) =>
+        apiAction.run(async () => {
+            const newWOData: Omit<WorkOrder, 'wo_id'> = {
+                aircraft_id: aircraft.id,
+                aircraft_tail_number: aircraft.tail_number,
+                visit_name: visit.visitName,
+                scheduled_date: visit.scheduledDate,
+                status: "Pending",
+                priority: "routine",
+                squawks: [],
+            };
             const createdWO = await api.createWorkOrder(newWOData);
             dispatch({ type: 'SET_WORK_ORDERS', payload: [...state.workOrders, createdWO] });
             showToast({ message: `Work Order created for ${visit.visitName}`, type: 'success' });
-        } catch (error) {
-            console.error("Failed to create work order:", error);
-            showToast({ message: 'Failed to create work order.', type: 'error' });
-        }
-    };
+        }, 'Failed to create work order.');
 
-    const handleAddWorkOrder = async (newWOData: Omit<WorkOrder, 'wo_id'>) => {
-        try {
+    const handleAddWorkOrder = (newWOData: Omit<WorkOrder, 'wo_id'>) =>
+        apiAction.run(async () => {
             const createdWO = await api.createWorkOrder(newWOData);
             dispatch({ type: 'SET_WORK_ORDERS', payload: [...state.workOrders, createdWO] });
             showToast({ message: 'Work Order created successfully.', type: 'success' });
-        } catch (error) {
-            console.error("Failed to add work order:", error);
-            showToast({ message: 'Failed to add work order.', type: 'error' });
-        }
-    };
+        }, 'Failed to add work order.');
 
-    const handleAddRepairOrder = async (newROData: Omit<RepairOrder, 'ro_id' | 'created_date'>) => {
-        try {
+    const handleAddRepairOrder = (newROData: Omit<RepairOrder, 'ro_id' | 'created_date'>) =>
+        apiAction.run(async () => {
             const createdRO = await api.createRepairOrder({...newROData, created_date: new Date().toISOString().split('T')[0]});
             dispatch({ type: 'SET_REPAIR_ORDERS', payload: [...state.repairOrders, createdRO] });
             showToast({ message: 'Repair Order created successfully.', type: 'success' });
-        } catch (error) {
-            console.error("Failed to add repair order:", error);
-            showToast({ message: 'Failed to add repair order.', type: 'error' });
-        }
-    };
+        }, 'Failed to add repair order.');
 
-    const handleAddTool = async (toolData: Omit<Tool, 'id'>) => {
-        try {
+    const handleAddTool = (toolData: Omit<Tool, 'id'>) =>
+        apiAction.run(async () => {
             const newTool = await api.createTool(toolData);
             dispatch({ type: 'SET_TOOLS', payload: [...state.tools, newTool] });
             showToast({ message: `Tool ${newTool.name} added.`, type: 'success' });
-        } catch (error) {
-            console.error("Failed to add tool:", error);
-            showToast({ message: 'Failed to add tool.', type: 'error' });
-        }
-    };
+        }, 'Failed to add tool.');
 
-    const handleUpdateTool = async (toolData: Tool) => {
-        try {
+    const handleUpdateTool = (toolData: Tool) =>
+        apiAction.run(async () => {
             const updatedTool = await api.updateTool(toolData);
             dispatch({ type: 'SET_TOOLS', payload: state.tools.map(t => t.id === updatedTool.id ? updatedTool : t) });
             showToast({ message: `Tool ${updatedTool.name} updated.`, type: 'success' });
-        } catch (error) {
-            console.error("Failed to update tool:", error);
-            showToast({ message: 'Failed to update tool.', type: 'error' });
-        }
-    };
+        }, 'Failed to update tool.');
 
-    const handleDeleteTool = async (toolId: string) => {
-        try {
+    const handleDeleteTool = (toolId: string) =>
+        apiAction.run(async () => {
             await api.deleteTool(toolId);
             dispatch({ type: 'SET_TOOLS', payload: state.tools.filter(t => t.id !== toolId) });
             showToast({ message: `Tool deleted.`, type: 'success' });
-        } catch (error) {
-            console.error("Failed to delete tool:", error);
-            showToast({ message: 'Failed to delete tool.', type: 'error' });
-        }
-    };
+        }, 'Failed to delete tool.');
 
     // ── Phase 1: unified tooling slice handlers ───────────────────────────
     const handleAddToolDirect = (tool: Tool) => {
@@ -369,26 +325,18 @@ const App: React.FC = () => {
     };
     // ─────────────────────────────────────────────────────────────────────
 
-    const handleUpdateConsumable = async (consumable: InventoryItem) => {
-        try {
+    const handleUpdateConsumable = (consumable: InventoryItem) =>
+        apiAction.run(async () => {
             const updatedItem = await api.updateConsumable(consumable);
             dispatch({ type: 'SET_CONSUMABLES', payload: state.consumables.map(c => c.id === updatedItem.id ? updatedItem : c) });
             showToast({ message: `Consumable updated.`, type: 'success' });
-        } catch (error) {
-            console.error("Failed to update consumable:", error);
-            showToast({ message: 'Failed to update consumable.', type: 'error' });
-        }
-    };
+        }, 'Failed to update consumable.');
 
-    const handleUpdatePart = async (part: InventoryItem) => {
-        try {
+    const handleUpdatePart = (part: InventoryItem) =>
+        apiAction.run(async () => {
             const updatedItem = await api.updatePart(part);
             dispatch({ type: 'SET_PARTS_INVENTORY', payload: state.partsInventory.map(p => p.id === updatedItem.id ? updatedItem : p) });
-        } catch (error) {
-            console.error('Failed to update part:', error);
-            showToast({ message: 'Failed to update part.', type: 'error' });
-        }
-    };
+        }, 'Failed to update part.');
 
     const handleReceivePart = (form: Form8130, newItemPartial: Partial<InventoryItem>) => {
         const formExists = state.forms8130.some(f => f.id === form.id);
@@ -515,38 +463,26 @@ const App: React.FC = () => {
     };
 
 
-    const handleAddTechnician = async (techData: Omit<Technician, 'id' | 'role'>) => {
-        try {
+    const handleAddTechnician = (techData: Omit<Technician, 'id' | 'role'>) =>
+        apiAction.run(async () => {
             const newTech = await api.createTechnician({ ...techData, role: 'Technician' });
             dispatch({ type: 'SET_TECHNICIANS', payload: [...state.technicians, newTech] });
             showToast({ message: `Technician ${newTech.name} added.`, type: 'success' });
-        } catch (error) {
-            console.error("Failed to add technician:", error);
-            showToast({ message: 'Failed to add technician.', type: 'error' });
-        }
-    };
+        }, 'Failed to add technician.');
 
-    const handleUpdateTechnician = async (updatedTech: Technician) => {
-        try {
+    const handleUpdateTechnician = (updatedTech: Technician) =>
+        apiAction.run(async () => {
             const result = await api.updateTechnician(updatedTech);
             dispatch({ type: 'SET_TECHNICIANS', payload: state.technicians.map(t => t.id === result.id ? result : t) });
             showToast({ message: `Technician ${result.name} updated.`, type: 'success' });
-        } catch (error) {
-            console.error("Failed to update technician:", error);
-            showToast({ message: 'Failed to update technician.', type: 'error' });
-        }
-    };
+        }, 'Failed to update technician.');
 
-    const handleUpdatePurchaseOrder = async (po: PurchaseOrder) => {
-        try {
+    const handleUpdatePurchaseOrder = (po: PurchaseOrder) =>
+        apiAction.run(async () => {
             const updatedPO = await api.updatePurchaseOrder(po);
             dispatch({ type: 'SET_PURCHASE_ORDERS', payload: state.purchaseOrders.map(p => p.po_id === updatedPO.po_id ? updatedPO : p) });
             showToast({ message: `Purchase Order ${updatedPO.po_id} updated.`, type: 'success' });
-        } catch (error) {
-            console.error("Failed to update PO:", error);
-            showToast({ message: 'Failed to update PO.', type: 'error' });
-        }
-    };
+        }, 'Failed to update PO.');
     
     const handleConfirmReception = (
         po: PurchaseOrder,
@@ -659,10 +595,9 @@ const App: React.FC = () => {
         showToast({message: `Technicians assigned to ${orderId}`, type: 'success'});
     }
 
-    const handleGlobalSearch = async (query: string) => {
-        setIsSearching(true);
+    const handleGlobalSearch = (query: string) => {
         setInitialFilters(null);
-        try {
+        return searchAction.run(async () => {
             const intent = getSearchIntent(query);
             if (intent.view !== 'unknown') {
                 setInitialFilters(intent.filters);
@@ -672,18 +607,13 @@ const App: React.FC = () => {
             } else {
                 showToast({ message: "Couldn't understand that search. Try rephrasing.", type: 'error' });
             }
-        } catch (error) {
-            console.error('Search failed:', error);
-            showToast({ message: 'Search failed. Please try again.', type: 'error' });
-        } finally {
-            setIsSearching(false);
-        }
+        }, 'Search failed. Please try again.');
     };
 
     const renderView = () => {
         switch (currentView) {
             case 'mission_control': return <MissionControlDashboard currentUser={currentUser!} {...state} onNavigate={handleNavigate} onNavigateToOrder={(view, id) => handleSelectOrder(view === 'work_orders' ? 'wo' : 'ro', id)} onNavigateWithFilters={(view, filters) => { setInitialFilters(filters); setCurrentView(view); }} />;
-            case 'aircraft': return <AircraftDashboard aircraftList={state.aircraftList} schedules={state.schedules} forecasts={state.forecasts} onScheduleGenerated={handleScheduleGenerated} workOrders={state.workOrders} onCreateWorkOrder={handleCreateWorkOrderFromVisit} onUpdateAircraft={handleUpdateAircraft} onAnalyzeHistory={handleAnalyzeHistory} isAnalyzing={isAnalyzing} technicians={state.technicians} />;
+            case 'aircraft': return <AircraftDashboard aircraftList={state.aircraftList} schedules={state.schedules} forecasts={state.forecasts} onScheduleGenerated={handleScheduleGenerated} workOrders={state.workOrders} onCreateWorkOrder={handleCreateWorkOrderFromVisit} onUpdateAircraft={handleUpdateAircraft} onAnalyzeHistory={handleAnalyzeHistory} isAnalyzing={analyzeAction.loading} technicians={state.technicians} />;
             case 'work_orders': return <WorkOrderDashboard workOrders={state.workOrders} aircraftList={state.aircraftList} onSelectOrder={(id) => handleSelectOrder('wo', id)} onAddWorkOrder={handleAddWorkOrder} initialFilters={initialFilters} />;
             case 'repair_orders': return <RepairOrderDashboard repairOrders={state.repairOrders} aircraftList={state.aircraftList} onSelectOrder={(id) => handleSelectOrder('ro', id)} onAddRepairOrder={handleAddRepairOrder} initialFilters={initialFilters} />;
             case 'tooling': return <ToolingDashboard tools={state.tools} toolKits={state.toolKits} neededTools={state.neededTools} onAddTool={handleAddToolDirect} onUpdateTool={handleUpdateToolDirect} onDeleteTool={handleDeleteToolDirect} onSetTools={handleSetTools} onSetKits={handleSetKits} onSetNeededTools={handleSetNeededTools} />;
@@ -768,98 +698,24 @@ const App: React.FC = () => {
 
     return (
         <div className={`flex h-screen bg-[#080c14] text-slate-200 font-sans overflow-hidden ${settings.appearance.density === 'Compact' ? 'text-sm' : ''}`}>
-            {/* ── Sidebar ── */}
-            <aside className="w-56 flex-shrink-0 flex flex-col bg-[#0d1220] border-r border-white/5 z-20">
-
-                {/* Logo */}
-                <div className="h-16 flex items-center px-5 border-b border-white/5 flex-shrink-0">
-                    <div className="flex items-center gap-2.5">
-                        <div className="w-7 h-7 rounded-lg bg-sky-500/15 border border-sky-500/25 flex items-center justify-center flex-shrink-0">
-                            <WrenchIcon className="w-3.5 h-3.5 text-sky-400" />
-                        </div>
-                        <div className="min-w-0">
-                            <p className="text-sm font-semibold text-white leading-tight truncate">
-                                {settings.organization.name.split(' ')[0]}
-                            </p>
-                            <p className="text-[10px] text-sky-400 font-mono tracking-widest uppercase leading-tight">
-                                {settings.organization.name.split(' ').slice(1).join(' ') || 'MRO'}
-                            </p>
-                        </div>
-                    </div>
-                </div>
-
-                {/* Nav groups */}
-                <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-4">
-                    {visibleGroups.map(group => (
-                        <div key={group.label}>
-                            <p className="px-3 mb-1 text-[9px] font-mono font-semibold text-slate-600 uppercase tracking-[0.18em]">
-                                {group.label}
-                            </p>
-                            <div className="space-y-0.5">
-                                {group.items.map(item => {
-                                    const isActive = currentView === item.view;
-                                    return (
-                                        <button
-                                            key={item.view}
-                                            onClick={() => handleNavigate({ view: item.view })}
-                                            className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-all duration-150 text-left ${
-                                                isActive
-                                                    ? 'bg-sky-500/12 text-white font-medium border border-sky-500/20'
-                                                    : 'text-slate-400 hover:text-slate-100 hover:bg-white/5'
-                                            }`}
-                                        >
-                                            <item.icon className={`w-4 h-4 flex-shrink-0 ${isActive ? 'text-sky-400' : 'text-slate-500'}`} />
-                                            {item.label}
-                                        </button>
-                                    );
-                                })}
-                            </div>
-                        </div>
-                    ))}
-                </nav>
-
-                {/* User footer */}
-                <div className="flex-shrink-0 border-t border-white/5 p-3 space-y-2">
-                    <div className="flex items-center gap-2.5 px-2 py-1.5">
-                        <div className="relative flex-shrink-0">
-                            <div className="w-7 h-7 rounded-full bg-slate-700 flex items-center justify-center text-xs font-semibold text-slate-300">
-                                {currentUser.name.charAt(0)}
-                            </div>
-                            <span className="absolute bottom-0 right-0 w-2 h-2 bg-emerald-500 rounded-full border border-[#0d1220]" />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                            <p className="text-xs font-medium text-white truncate">{currentUser.name}</p>
-                            <p className="text-[10px] text-slate-500 truncate">{currentUser.role}</p>
-                        </div>
-                        <button
-                            onClick={() => setIsSettingsOpen(true)}
-                            className="flex-shrink-0 p-1 text-slate-500 hover:text-white rounded transition-colors"
-                            title="Settings"
-                        >
-                            <CogIcon className="w-4 h-4" />
-                        </button>
-                    </div>
-                    <button
-                        onClick={() => setCurrentUser(null)}
-                        className="w-full text-[11px] text-slate-600 hover:text-slate-300 py-1.5 rounded-lg hover:bg-white/5 transition-colors"
-                    >
-                        Sign out
-                    </button>
-                </div>
-            </aside>
+            <AppSidebar
+                currentUser={currentUser}
+                currentView={currentView}
+                visibleGroups={visibleGroups}
+                onNavigate={view => handleNavigate({ view })}
+                onOpenSettings={() => setIsSettingsOpen(true)}
+                onSignOut={() => setCurrentUser(null)}
+            />
 
             {/* ── Main Content ── */}
             <main className="flex-1 flex flex-col h-full overflow-hidden bg-[#080c14]">
-
-                {/* Top header bar */}
-                <header className="h-14 flex-shrink-0 flex items-center justify-between px-6 border-b border-white/5 bg-[#0d1220]/80 backdrop-blur-sm z-10">
-                    <div className="w-full max-w-sm">
-                        <GlobalSearchBar onSearch={handleGlobalSearch} isSearching={isSearching} />
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <NotificationCenter notifications={state.notifications} onMarkAsRead={() => dispatch({type: 'MARK_NOTIFICATIONS_AS_READ'})} onNavigate={handleNavigate} />
-                    </div>
-                </header>
+                <AppHeader
+                    onSearch={handleGlobalSearch}
+                    isSearching={searchAction.loading}
+                    notifications={state.notifications}
+                    onMarkAsRead={() => dispatch({ type: 'MARK_NOTIFICATIONS_AS_READ' })}
+                    onNavigate={handleNavigate}
+                />
 
                 <div className="flex-1 overflow-y-auto px-6 py-6 scroll-smooth">
                     {state.isLoading ? (
