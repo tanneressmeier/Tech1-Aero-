@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
-// FIX: Corrected import path for types by adding the file extension.
 import { RepairOrder, Aircraft, Squawk } from '../types.ts';
-// FIX: Added .tsx extension to component import.
 import { XMarkIcon } from './icons.tsx';
+import { useFormModal } from '../hooks/useFormModal.ts';
 
 interface AddRepairOrderModalProps {
     isOpen: boolean;
@@ -15,18 +14,16 @@ export const AddRepairOrderModal: React.FC<AddRepairOrderModalProps> = ({ isOpen
     const [aircraftId, setAircraftId] = useState(aircraftList[0]?.id || '');
     const [description, setDescription] = useState('');
     const [squawkText, setSquawkText] = useState('');
+    const { isSubmitting, error, handleSubmit } = useFormModal(onClose);
 
     if (!isOpen) return null;
 
-    const handleSubmit = (e: React.FormEvent) => {
-        e.preventDefault();
+    const onSubmit = handleSubmit(() => {
         const aircraft = aircraftList.find(ac => ac.id === aircraftId);
         if (!aircraft || !description.trim() || !squawkText.trim()) {
-            alert('Please fill out all fields.');
-            return;
+            throw new Error('Please fill out all fields.');
         }
-
-        const newRO: Omit<RepairOrder, 'ro_id' | 'created_date'> = {
+        onAdd({
             aircraft_id: aircraft.id,
             aircraft_tail_number: aircraft.tail_number,
             description: description.trim(),
@@ -59,26 +56,22 @@ export const AddRepairOrderModal: React.FC<AddRepairOrderModalProps> = ({ isOpen
                 used_tool_ids: [],
                 used_parts: [],
                 resolution: '',
-                // FIX: Added missing signatures property to conform to the Squawk type.
                 signatures: {
                     work_complete: null,
                     operational_check: null,
                     inspector: null,
                     return_to_service: null,
                 },
-            }))
-        };
-        onAdd(newRO);
-        onClose();
-        // Reset form
+            })),
+        });
         setDescription('');
         setSquawkText('');
-    };
+    });
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center z-50 backdrop-blur-sm" onClick={onClose}>
             <div className="bg-slate-800 rounded-2xl shadow-2xl border border-slate-700 w-full max-w-lg" onClick={e => e.stopPropagation()}>
-                <form onSubmit={handleSubmit}>
+                <form onSubmit={onSubmit}>
                     <div className="p-6 border-b border-slate-700 flex justify-between items-start">
                          <h2 className="text-2xl font-bold text-white">New Repair Order</h2>
                          <button type="button" onClick={onClose} className="p-1 rounded-full hover:bg-slate-700"><XMarkIcon className="w-6 h-6" /></button>
@@ -100,8 +93,9 @@ export const AddRepairOrderModal: React.FC<AddRepairOrderModalProps> = ({ isOpen
                         </div>
                     </div>
                     <div className="p-6 bg-slate-900/50 flex justify-end gap-3">
+                        {error && <p className="text-sm text-red-400 self-center mr-auto">{error}</p>}
                         <button type="button" onClick={onClose} className="bg-slate-600 hover:bg-slate-500 text-white font-bold py-2 px-4 rounded-md">Cancel</button>
-                        <button type="submit" className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-md">Create Order</button>
+                        <button type="submit" disabled={isSubmitting} className="bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-600 text-white font-bold py-2 px-4 rounded-md">Create Order</button>
                     </div>
                 </form>
             </div>

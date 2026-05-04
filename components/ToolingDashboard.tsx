@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useReducer } from 'react';
 import { Tool, Kit } from '../types.ts';
 import { useToast } from '../contexts/ToastContext.tsx';
 import {
@@ -8,6 +8,7 @@ import {
   FolderOpenIcon, XMarkIcon, InformationCircleIcon, DocumentIcon,
 } from './icons.tsx';
 import { detectCsvColumnMapping, applyCsvMapping, predictToolsFromJob, compareToolsClientSide, findSubstitutions } from '../services/geminiService.ts';
+import { useAsyncAction } from '../hooks/useAsyncAction.ts';
 import { getVendorSourcingInfo } from '../services/vendorDirectory.ts';
 import { ToolingReportModal } from './ToolingReportModal.tsx';
 
@@ -147,35 +148,52 @@ export const ToolingDashboard: React.FC<ToolingDashboardProps> = ({
   onAddTool, onUpdateTool, onDeleteTool, onSetTools, onSetKits, onSetNeededTools,
 }) => {
   const { showToast } = useToast();
-  const [tab, setTab] = useState<TabId>('inventory');
-  const [search, setSearch] = useState('');
-  const [catFilter, setCatFilter] = useState('All');
-  const [calFilter, setCalFilter] = useState('All');
+  const [tab,      setTab]      = useState<TabId>('inventory');
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [editTool, setEditTool] = useState<Partial<Tool> | null | false>(false);
-
-  // ── Comparison tab state
-  const [compResult, setCompResult] = useState<{ available: Tool[]; onOrder: Tool[]; shortage: Tool[] } | null>(null);
-  const [subs, setSubs] = useState<any[]>([]);
-  const [isComparing, setIsComparing] = useState(false);
-  const [isFindingSubs, setIsFindingSubs] = useState(false);
-  const [sourcingTool, setSourcingTool] = useState<Tool | null>(null);
-
-  // ── Predict tab state
-  const [jobDesc, setJobDesc] = useState('');
-  const [isPredicting, setIsPredicting] = useState(false);
-  const [predicted, setPredicted] = useState<Tool[]>([]);
-
-  // ── CSV import state
-  const [isImporting, setIsImporting] = useState(false);
   const [isReportOpen, setIsReportOpen] = useState(false);
+  const [newKitName,   setNewKitName]   = useState('');
 
-  // ── Kit state
-  const [newKitName, setNewKitName] = useState('');
+  // ── Inventory filter — grouped because all three feed the filtered useMemo
+  const [filter, setFilter] = useState({ search: '', catFilter: 'All', calFilter: 'All' });
+
+  // ── Comparison tab — useReducer makes state transitions explicit (start→done, subs, sourcing)
+  type CompState = {
+      result:      { available: Tool[]; onOrder: Tool[]; shortage: Tool[] } | null;
+      subs:        any[];
+      isComparing: boolean;
+      sourcingTool: Tool | null;
+  };
+  type CompAction =
+      | { type: 'start' }
+      | { type: 'done'; result: CompState['result'] }
+      | { type: 'set_subs'; subs: any[] }
+      | { type: 'set_sourcing'; tool: Tool | null };
+
+  const [comp, dispatchComp] = useReducer(
+      (state: CompState, action: CompAction): CompState => {
+          switch (action.type) {
+              case 'start':       return { ...state, isComparing: true };
+              case 'done':        return { ...state, isComparing: false, result: action.result, subs: [] };
+              case 'set_subs':    return { ...state, subs: action.subs };
+              case 'set_sourcing':return { ...state, sourcingTool: action.tool };
+          }
+      },
+      { result: null, subs: [], isComparing: false, sourcingTool: null },
+  );
+
+  // ── Predict tab — input + result always clear/set together
+  const [predict, setPredict] = useState<{ jobDesc: string; predicted: Tool[] }>({ jobDesc: '', predicted: [] });
+
+  // ── Async action hooks
+  const findSubsAction = useAsyncAction();
+  const predictAction  = useAsyncAction();
+  const importAction   = useAsyncAction();
 
   const categories = useMemo(() => ['All', ...Array.from(new Set(tools.map(t => t.category).filter(Boolean)))].sort(), [tools]);
 
   const filtered = useMemo(() => {
+    const { search, catFilter, calFilter } = filter;
     const q = search.toLowerCase();
     return tools.filter(t => {
       const matchSearch = !q || t.name.toLowerCase().includes(q) || t.id.toLowerCase().includes(q) || (t.make ?? '').toLowerCase().includes(q) || (t.model ?? '').toLowerCase().includes(q);
@@ -186,29 +204,24 @@ export const ToolingDashboard: React.FC<ToolingDashboardProps> = ({
         (calFilter === 'Due Soon' && t.calibrationRequired && (t.calibrationDueDays ?? 999) >= 0 && (t.calibrationDueDays ?? 999) < 30);
       return matchSearch && matchCat && matchCal;
     });
-  }, [tools, search, catFilter, calFilter]);
+  }, [tools, filter]);
 
   const toggleSelect = (id: string) => setSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const selectAll = () => setSelected(filtered.length === selected.size ? new Set() : new Set(filtered.map(t => t.id)));
 
   // ── CSV import
-  const handleCsvImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleCsvImport = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     e.target.value = '';
-    setIsImporting(true);
-    try {
+    importAction.run(async () => {
       const text = await file.text();
       const headerRow = text.split('\n')[0];
       const mapping = await detectCsvColumnMapping(headerRow);
       const imported = applyCsvMapping(text, mapping);
       onSetTools([...tools, ...imported]);
       showToast({ message: `Imported ${imported.length} tools`, type: 'success' });
-    } catch (err: any) {
-      showToast({ message: `Import failed: ${err.message}`, type: 'error' });
-    } finally {
-      setIsImporting(false);
-    }
+    }, 'Import failed.');
   };
 
   // ── CSV export
@@ -226,44 +239,32 @@ export const ToolingDashboard: React.FC<ToolingDashboardProps> = ({
   // ── Run comparison (client-side, zero tokens)
   const handleCompare = () => {
     if (!neededTools.length) { showToast({ message: 'No needed tools loaded. Use Predict tab or add tools first.', type: 'info' }); return; }
-    setIsComparing(true);
+    dispatchComp({ type: 'start' });
     setTimeout(() => {
       const result = compareToolsClientSide(neededTools, tools);
-      setCompResult(result);
-      setSubs([]);
-      setIsComparing(false);
+      dispatchComp({ type: 'done', result });
       showToast({ message: `Comparison complete — ${result.available.length} available, ${result.shortage.length} shortage`, type: 'success' });
     }, 300);
   };
 
   // ── Find substitutions (AI, user-gated)
-  const handleFindSubs = async () => {
-    if (!compResult?.shortage.length) return;
-    setIsFindingSubs(true);
-    try {
-      const result = await findSubstitutions(compResult.shortage, tools);
-      setSubs(result);
+  const handleFindSubs = () => {
+    if (!comp.result?.shortage.length) return;
+    findSubsAction.run(async () => {
+      const result = await findSubstitutions(comp.result!.shortage, tools);
+      dispatchComp({ type: 'set_subs', subs: result });
       showToast({ message: `Found ${result.length} substitution suggestion(s)`, type: 'success' });
-    } catch (err: any) {
-      showToast({ message: `AI error: ${err.message}`, type: 'error' });
-    } finally {
-      setIsFindingSubs(false);
-    }
+    }, 'AI substitution lookup failed.');
   };
 
   // ── Predict tools from job description
-  const handlePredict = async () => {
-    if (!jobDesc.trim()) return;
-    setIsPredicting(true);
-    try {
-      const result = await predictToolsFromJob(jobDesc, tools);
-      setPredicted(result);
+  const handlePredict = () => {
+    if (!predict.jobDesc.trim()) return;
+    predictAction.run(async () => {
+      const result = await predictToolsFromJob(predict.jobDesc, tools);
+      setPredict(p => ({ ...p, predicted: result }));
       showToast({ message: `AI predicted ${result.length} tools`, type: 'success' });
-    } catch (err: any) {
-      showToast({ message: `AI error: ${err.message}`, type: 'error' });
-    } finally {
-      setIsPredicting(false);
-    }
+    }, 'AI prediction failed.');
   };
 
   // ── Kit management
@@ -325,20 +326,20 @@ export const ToolingDashboard: React.FC<ToolingDashboardProps> = ({
           <div className="flex flex-wrap gap-2 items-center">
             <div className="relative flex-1 min-w-48">
               <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-              <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search tools…"
+              <input value={filter.search} onChange={e => setFilter(p => ({ ...p, search: e.target.value }))} placeholder="Search tools…"
                 className="w-full pl-9 pr-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-sky-500" />
             </div>
-            <select value={catFilter} onChange={e => setCatFilter(e.target.value)} className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-slate-300 focus:outline-none focus:border-sky-500">
+            <select value={filter.catFilter} onChange={e => setFilter(p => ({ ...p, catFilter: e.target.value }))} className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-slate-300 focus:outline-none focus:border-sky-500">
               {categories.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
-            <select value={calFilter} onChange={e => setCalFilter(e.target.value)} className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-slate-300 focus:outline-none focus:border-sky-500">
+            <select value={filter.calFilter} onChange={e => setFilter(p => ({ ...p, calFilter: e.target.value }))} className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-slate-300 focus:outline-none focus:border-sky-500">
               {['All','Required','Overdue','Due Soon'].map(c => <option key={c} value={c}>{c}</option>)}
             </select>
             <div className="flex gap-1 ml-auto">
-              <label className={`flex items-center gap-1.5 px-3 py-2 text-sm rounded-lg cursor-pointer transition-colors ${isImporting ? 'bg-sky-500/20 text-sky-300' : 'bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10'}`}>
+              <label className={`flex items-center gap-1.5 px-3 py-2 text-sm rounded-lg cursor-pointer transition-colors ${importAction.loading ? 'bg-sky-500/20 text-sky-300' : 'bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10'}`}>
                 <ArrowUpTrayIcon className="w-4 h-4" />
-                {isImporting ? 'Importing…' : 'Import CSV'}
-                <input type="file" accept=".csv" className="hidden" onChange={handleCsvImport} disabled={isImporting} />
+                {importAction.loading ? 'Importing…' : 'Import CSV'}
+                <input type="file" accept=".csv" className="hidden" onChange={handleCsvImport} disabled={importAction.loading} />
               </label>
               <button onClick={handleExport} className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-lg bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10">
                 <ArrowDownTrayIcon className="w-4 h-4" /> Export
@@ -404,34 +405,34 @@ export const ToolingDashboard: React.FC<ToolingDashboardProps> = ({
               <p className="text-sm text-slate-400">Compare a needed tools list against master inventory. Matching runs client-side (no API tokens). AI substitutions are opt-in.</p>
               <p className="text-sm text-slate-500 mt-0.5">Needed tools loaded: <span className="text-sky-300 font-medium">{neededTools.length}</span> — populate via AI Prediction tab or use existing inventory.</p>
             </div>
-            <button onClick={handleCompare} disabled={isComparing || !neededTools.length}
+            <button onClick={handleCompare} disabled={comp.isComparing || !neededTools.length}
               className="px-4 py-2 text-sm rounded-lg bg-sky-600 hover:bg-sky-500 text-white font-medium disabled:opacity-40 flex items-center gap-1.5">
-              {isComparing ? 'Comparing…' : 'Run Comparison'}
+              {comp.isComparing ? 'Comparing…' : 'Run Comparison'}
             </button>
           </div>
 
-          {compResult && (
+          {comp.result && (
             <div className="grid grid-cols-3 gap-4">
               {/* Available */}
               <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-4">
                 <div className="flex items-center gap-2 mb-3">
                   <CheckBadgeIcon className="w-5 h-5 text-emerald-400" />
-                  <span className="text-sm font-semibold text-emerald-300">Available ({compResult.available.length})</span>
+                  <span className="text-sm font-semibold text-emerald-300">Available ({comp.result.available.length})</span>
                 </div>
                 <div className="space-y-1.5 max-h-64 overflow-y-auto">
-                  {compResult.available.map(t => <div key={t.id} className="text-xs text-emerald-200 truncate">{t.name}</div>)}
-                  {!compResult.available.length && <p className="text-xs text-slate-500">None</p>}
+                  {comp.result.available.map(t => <div key={t.id} className="text-xs text-emerald-200 truncate">{t.name}</div>)}
+                  {!comp.result.available.length && <p className="text-xs text-slate-500">None</p>}
                 </div>
               </div>
               {/* On Order */}
               <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4">
                 <div className="flex items-center gap-2 mb-3">
                   <ClockBadge />
-                  <span className="text-sm font-semibold text-amber-300">On Order ({compResult.onOrder.length})</span>
+                  <span className="text-sm font-semibold text-amber-300">On Order ({comp.result.onOrder.length})</span>
                 </div>
                 <div className="space-y-1.5 max-h-64 overflow-y-auto">
-                  {compResult.onOrder.map(t => <div key={t.id} className="text-xs text-amber-200 truncate">{t.name}</div>)}
-                  {!compResult.onOrder.length && <p className="text-xs text-slate-500">None</p>}
+                  {comp.result.onOrder.map(t => <div key={t.id} className="text-xs text-amber-200 truncate">{t.name}</div>)}
+                  {!comp.result.onOrder.length && <p className="text-xs text-slate-500">None</p>}
                 </div>
               </div>
               {/* Shortage */}
@@ -439,35 +440,35 @@ export const ToolingDashboard: React.FC<ToolingDashboardProps> = ({
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-2">
                     <ExclamationTriangleIcon className="w-5 h-5 text-red-400" />
-                    <span className="text-sm font-semibold text-red-300">Shortage ({compResult.shortage.length})</span>
+                    <span className="text-sm font-semibold text-red-300">Shortage ({comp.result.shortage.length})</span>
                   </div>
-                  {compResult.shortage.length > 0 && (
-                    <button onClick={handleFindSubs} disabled={isFindingSubs} className="text-xs px-2 py-1 rounded bg-red-500/20 text-red-300 hover:bg-red-500/30 disabled:opacity-40 flex items-center gap-1">
-                      <SparklesIcon className="w-3 h-3" />{isFindingSubs ? '…' : 'Find Subs'}
+                  {comp.result.shortage.length > 0 && (
+                    <button onClick={handleFindSubs} disabled={findSubsAction.loading} className="text-xs px-2 py-1 rounded bg-red-500/20 text-red-300 hover:bg-red-500/30 disabled:opacity-40 flex items-center gap-1">
+                      <SparklesIcon className="w-3 h-3" />{findSubsAction.loading ? '…' : 'Find Subs'}
                     </button>
                   )}
                 </div>
                 <div className="space-y-2 max-h-64 overflow-y-auto">
-                  {compResult.shortage.map(t => (
+                  {comp.result.shortage.map(t => (
                     <div key={t.id} className="text-xs">
                       <div className="text-red-200 truncate">{t.name}</div>
-                      <button onClick={() => setSourcingTool(t)} className="text-sky-400 hover:underline flex items-center gap-0.5 mt-0.5">
+                      <button onClick={() => dispatchComp({ type: 'set_sourcing', tool: t })} className="text-sky-400 hover:underline flex items-center gap-0.5 mt-0.5">
                         <InformationCircleIcon className="w-3 h-3" /> Find vendors
                       </button>
                     </div>
                   ))}
-                  {!compResult.shortage.length && <p className="text-xs text-slate-500">No shortages</p>}
+                  {!comp.result.shortage.length && <p className="text-xs text-slate-500">No shortages</p>}
                 </div>
               </div>
             </div>
           )}
 
           {/* Substitutions */}
-          {subs.length > 0 && (
+          {comp.subs.length > 0 && (
             <div className="bg-sky-500/10 border border-sky-500/20 rounded-xl p-4">
               <h4 className="text-sm font-semibold text-sky-300 mb-3">AI Substitution Suggestions</h4>
               <div className="space-y-2">
-                {subs.map((s, i) => (
+                {comp.subs.map((s, i) => (
                   <div key={i} className="flex items-start gap-3 text-xs text-slate-300 bg-white/3 rounded-lg px-3 py-2">
                     <span className={`font-bold mt-0.5 ${s.confidence === 'High' ? 'text-emerald-400' : s.confidence === 'Medium' ? 'text-amber-400' : 'text-red-400'}`}>{s.confidence}</span>
                     <div><span className="text-slate-400">Need:</span> {s.neededTool.name} → <span className="text-sky-200">Use:</span> {s.suggestedTool.name}<br /><span className="text-slate-500">{s.reason}</span></div>
@@ -478,16 +479,16 @@ export const ToolingDashboard: React.FC<ToolingDashboardProps> = ({
           )}
 
           {/* Vendor sourcing modal */}
-          {sourcingTool && (
+          {comp.sourcingTool && (
             <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
               <div className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-lg shadow-2xl">
                 <div className="flex items-center justify-between px-6 py-4 border-b border-white/10">
-                  <h3 className="text-sm font-semibold text-slate-100">Vendor Links — {sourcingTool.name}</h3>
-                  <button onClick={() => setSourcingTool(null)} className="text-slate-400 hover:text-white"><XMarkIcon className="w-5 h-5" /></button>
+                  <h3 className="text-sm font-semibold text-slate-100">Vendor Links — {comp.sourcingTool.name}</h3>
+                  <button onClick={() => dispatchComp({ type: 'set_sourcing', tool: null })} className="text-slate-400 hover:text-white"><XMarkIcon className="w-5 h-5" /></button>
                 </div>
                 <div className="p-6 space-y-3">
                   {(() => {
-                    const info = getVendorSourcingInfo(sourcingTool);
+                    const info = getVendorSourcingInfo(comp.sourcingTool!);
                     return (
                       <>
                         <p className="text-xs text-slate-400">{info.sourcingNotes}</p>
@@ -549,23 +550,23 @@ export const ToolingDashboard: React.FC<ToolingDashboardProps> = ({
             <SparklesIcon className="w-5 h-5 text-sky-400 flex-shrink-0 mt-0.5" />
             <p className="text-sm text-slate-300">Describe the maintenance job and Gemini AI will predict the required tools. Results load directly into the Comparison tab as your needed tools list.</p>
           </div>
-          <textarea value={jobDesc} onChange={e => setJobDesc(e.target.value)} rows={4} placeholder="e.g. 500-hour inspection on Cessna Citation CJ3, including pitot-static check, landing gear service, and engine hot section inspection…"
+          <textarea value={predict.jobDesc} onChange={e => setPredict(p => ({ ...p, jobDesc: e.target.value }))} rows={4} placeholder="e.g. 500-hour inspection on Cessna Citation CJ3, including pitot-static check, landing gear service, and engine hot section inspection…"
             className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-sky-500 resize-none" />
-          <button onClick={handlePredict} disabled={isPredicting || !jobDesc.trim()}
+          <button onClick={handlePredict} disabled={predictAction.loading || !predict.jobDesc.trim()}
             className="self-start flex items-center gap-2 px-5 py-2.5 bg-sky-600 hover:bg-sky-500 text-white text-sm font-medium rounded-lg disabled:opacity-40 transition-colors">
             <SparklesIcon className="w-4 h-4" />
-            {isPredicting ? 'Predicting…' : 'Predict Required Tools'}
+            {predictAction.loading ? 'Predicting…' : 'Predict Required Tools'}
           </button>
 
-          {predicted.length > 0 && (
+          {predict.predicted.length > 0 && (
             <div className="bg-white/3 border border-white/10 rounded-xl p-4 space-y-3">
               <div className="flex items-center justify-between">
-                <h4 className="text-sm font-semibold text-slate-100">Predicted tools ({predicted.length})</h4>
-                <button onClick={() => { onSetNeededTools(predicted); showToast({ message: `${predicted.length} tools loaded for comparison`, type: 'success' }); setTab('comparison'); }}
+                <h4 className="text-sm font-semibold text-slate-100">Predicted tools ({predict.predicted.length})</h4>
+                <button onClick={() => { onSetNeededTools(predict.predicted); showToast({ message: `${predict.predicted.length} tools loaded for comparison`, type: 'success' }); setTab('comparison'); }}
                   className="text-sm px-3 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white">Use for Comparison →</button>
               </div>
               <div className="divide-y divide-white/5 max-h-72 overflow-y-auto">
-                {predicted.map((t, i) => (
+                {predict.predicted.map((t, i) => (
                   <div key={i} className="flex items-center justify-between py-2 text-sm">
                     <span className="text-slate-200">{t.name}</span>
                     <div className="flex items-center gap-3 text-xs text-slate-400">

@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { InventoryItem } from '../types.ts';
 import { SidePanel } from './SidePanel.tsx';
+import { useFormModal } from '../hooks/useFormModal.ts';
 
 interface AssignPartModalProps {
     isOpen: boolean;
@@ -13,25 +14,23 @@ export const AssignPartModal: React.FC<AssignPartModalProps> = ({ isOpen, onClos
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedPartId, setSelectedPartId] = useState<string | null>(null);
     const [quantity, setQuantity] = useState(1);
+    const { isSubmitting, handleSubmit } = useFormModal(onClose);
 
-    const filteredInventory = useMemo(() => 
-        inventory.filter(item => 
+    const filteredInventory = useMemo(() =>
+        inventory.filter(item =>
             item.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
             item.part_no.toLowerCase().includes(searchTerm.toLowerCase())
         ), [inventory, searchTerm]);
 
     if (!isOpen) return null;
 
-    const handleSubmit = (e: React.FormEvent) => {
-        e.preventDefault();
-        if (selectedPartId && quantity > 0) {
-            onAssignPart(selectedPartId, quantity);
-            // Reset for next time
-            setSelectedPartId(null);
-            setQuantity(1);
-            setSearchTerm('');
-        }
-    };
+    const onSubmit = handleSubmit(() => {
+        if (!selectedPartId || quantity <= 0) throw new Error('Please select a part and quantity.');
+        onAssignPart(selectedPartId, quantity);
+        setSelectedPartId(null);
+        setQuantity(1);
+        setSearchTerm('');
+    });
 
     return (
         <SidePanel
@@ -47,12 +46,12 @@ export const AssignPartModal: React.FC<AssignPartModalProps> = ({ isOpen, onClos
                     </div>
                     <div className="flex gap-3">
                         <button type="button" onClick={onClose} className="bg-slate-600 hover:bg-slate-500 text-white font-bold py-2 px-4 rounded-md">Cancel</button>
-                        <button type="submit" form="assign-part-form" disabled={!selectedPartId} className="bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-600 disabled:cursor-not-allowed text-white font-bold py-2 px-4 rounded-md">Assign Part</button>
+                        <button type="submit" form="assign-part-form" disabled={!selectedPartId || isSubmitting} className="bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-600 disabled:cursor-not-allowed text-white font-bold py-2 px-4 rounded-md">Assign Part</button>
                     </div>
                 </>
             }
         >
-            <form id="assign-part-form" onSubmit={handleSubmit} className="flex flex-col h-full">
+            <form id="assign-part-form" onSubmit={onSubmit} className="flex flex-col h-full">
                 <input 
                     type="text"
                     value={searchTerm}

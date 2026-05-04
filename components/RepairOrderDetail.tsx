@@ -7,7 +7,7 @@ import { compareToolsClientSide } from '../services/geminiService.ts';
 import { ProfitabilityPanel } from './ProfitabilityPanel.tsx';
 import { computeWoCompletion } from '../utils/ganttEngine.ts';
 import { analyzeOrderBottlenecks } from '../utils/skillsEngine.ts';
-import { StatusBadge, PriorityBadge, MetaGrid, AlertBanner, ActionButton } from './ui.tsx';
+import { StatusBadge, PriorityBadge, MetaGrid, AlertBanner, ActionButton, SectionCard } from './ui.tsx';
 import {
     CurrencyDollarIcon, WrenchIcon, CheckBadgeIcon, ExclamationTriangleIcon,
 } from './icons.tsx';
@@ -142,7 +142,7 @@ export const RepairOrderDetail: React.FC<RepairOrderDetailProps> = ({
             </div>
 
             {/* Header card */}
-            <div className="bg-white/3 border border-white/8 rounded-xl p-5 flex-shrink-0 space-y-4">
+            <SectionCard className="flex-shrink-0 space-y-4">
                 <div className="flex items-start justify-between gap-4">
                     <div>
                         <div className="flex items-center gap-2.5 flex-wrap">
@@ -194,7 +194,7 @@ export const RepairOrderDetail: React.FC<RepairOrderDetailProps> = ({
                         <ProfitabilityPanel  order={order} inventory={inventory} />
                     </div>
                 )}
-            </div>
+            </SectionCard>
 
                         {/* ── Squawks ── */}
             <div>

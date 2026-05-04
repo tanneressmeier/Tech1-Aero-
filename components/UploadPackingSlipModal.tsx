@@ -2,6 +2,7 @@ import React, { useState, useCallback } from 'react';
 import { ParsedPOHeader, ParsedPackingSlipItem } from '../types.ts';
 import { analyzePackingSlip } from '../services/geminiService.ts';
 import { XMarkIcon, ArrowUpTrayIcon } from './icons.tsx';
+import { useAsyncAction } from '../hooks/useAsyncAction.ts';
 
 interface UploadPackingSlipModalProps {
     isOpen: boolean;
@@ -20,28 +21,21 @@ const blobToBase64 = (blob: Blob): Promise<string> =>
 export const UploadPackingSlipModal: React.FC<UploadPackingSlipModalProps> = ({ isOpen, onClose, onCommit }) => {
     const [header, setHeader] = useState<ParsedPOHeader | null>(null);
     const [items, setItems]   = useState<ParsedPackingSlipItem[]>([]);
-    const [isLoading, setIsLoading] = useState(false);
-    const [error, setError]   = useState<string | null>(null);
+    const uploadAction = useAsyncAction();
 
-    const reset = useCallback(() => { setHeader(null); setItems([]); setIsLoading(false); setError(null); }, []);
+    const reset = useCallback(() => { setHeader(null); setItems([]); }, []);
     const handleClose = () => { reset(); onClose(); };
 
-    const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
         reset();
-        setIsLoading(true);
-        try {
+        uploadAction.run(async () => {
             const b64 = await blobToBase64(file);
-            // analyzePackingSlip returns ParsedPackingSlipItem[] — build a synthetic header
             const parsed = await analyzePackingSlip(b64, file.type);
             setHeader({ supplierName: 'Unknown Supplier', poNumber: 'SCAN-' + Date.now(), orderDate: new Date().toISOString().split('T')[0], estimatedTotal: 0 });
             setItems(parsed);
-        } catch (err: any) {
-            setError(err.message || 'Unexpected error.');
-        } finally {
-            setIsLoading(false);
-        }
+        }, 'Unexpected error.');
     };
 
     const handleCommit = () => {
@@ -64,7 +58,7 @@ export const UploadPackingSlipModal: React.FC<UploadPackingSlipModalProps> = ({ 
                 </div>
 
                 <div className="p-6 max-h-[70vh] overflow-y-auto">
-                    {!header && !isLoading && (
+                    {!header && !uploadAction.loading && (
                         <label className="flex flex-col items-center justify-center w-full h-56 border-2 border-slate-600 border-dashed rounded-lg cursor-pointer bg-slate-900/50 hover:bg-slate-700/50">
                             <ArrowUpTrayIcon className="w-8 h-8 mb-3 text-slate-400" />
                             <p className="text-sm text-slate-400"><span className="font-semibold">Click to upload</span> or drag and drop</p>
@@ -72,8 +66,8 @@ export const UploadPackingSlipModal: React.FC<UploadPackingSlipModalProps> = ({ 
                             <input type="file" className="hidden" accept="image/*" onChange={handleFileChange} />
                         </label>
                     )}
-                    {isLoading && <p className="text-center py-10 text-slate-300">Analyzing document with AI…</p>}
-                    {error   && <div className="bg-red-500/20 text-red-300 p-3 rounded-md text-center">{error}</div>}
+                    {uploadAction.loading && <p className="text-center py-10 text-slate-300">Analyzing document with AI…</p>}
+                    {uploadAction.error && <div className="bg-red-500/20 text-red-300 p-3 rounded-md text-center">{uploadAction.error}</div>}
 
                     {header && items.length > 0 && (
                         <div className="space-y-4">
@@ -108,9 +102,9 @@ export const UploadPackingSlipModal: React.FC<UploadPackingSlipModalProps> = ({ 
 
                 <div className="p-5 bg-slate-900/50 rounded-b-2xl flex justify-end gap-3">
                     <button onClick={handleClose} className="bg-slate-600 hover:bg-slate-500 text-white py-2 px-4 rounded-md text-sm">Cancel</button>
-                    <button onClick={handleCommit} disabled={!items.length || isLoading}
+                    <button onClick={handleCommit} disabled={!items.length || uploadAction.loading}
                         className="bg-sky-600 hover:bg-sky-500 disabled:bg-slate-600 disabled:text-slate-400 text-white py-2 px-4 rounded-md text-sm font-medium">
-                        {isLoading ? 'Processing…' : 'Commit to Inventory'}
+                        {uploadAction.loading ? 'Processing…' : 'Commit to Inventory'}
                     </button>
                 </div>
             </div>

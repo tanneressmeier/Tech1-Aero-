@@ -1,14 +1,12 @@
 
 import React, { useState } from 'react';
-// FIX: Corrected import path for types by adding the file extension.
 import { Technician } from '../types.ts';
-// FIX: Added .tsx extension to component import.
 import { BaseModal } from './BaseModal.tsx';
+import { useFormModal } from '../hooks/useFormModal.ts';
 
 interface AddTechnicianModalProps {
     isOpen: boolean;
     onClose: () => void;
-    // FIX: Changed type to Omit 'role' as well, to match the parent component's callback signature.
     onAdd: (technician: Omit<Technician, 'id' | 'role'>) => void;
 }
 
@@ -16,27 +14,20 @@ export const AddTechnicianModal: React.FC<AddTechnicianModalProps> = ({ isOpen, 
     const [name, setName] = useState('');
     const [certs, setCerts] = useState('');
     const [efficiency, setEfficiency] = useState('85');
+    const { isSubmitting, error, handleSubmit } = useFormModal(onClose);
 
-    const handleClose = () => {
-        setName('');
-        setCerts('');
-        setEfficiency('85');
-        onClose();
-    };
+    const reset = () => { setName(''); setCerts(''); setEfficiency('85'); };
+    const handleClose = () => { reset(); onClose(); };
 
-    const handleSubmit = (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!name.trim()) {
-            return;
-        }
-        const newTechnician = {
+    const onSubmit = handleSubmit(() => {
+        if (!name.trim()) throw new Error('Name is required.');
+        onAdd({
             name: name.trim(),
             certifications: certs.split(',').map(c => c.trim()).filter(Boolean),
-            efficiency: Math.max(0, Math.min(100, Number(efficiency))) / 100
-        };
-        onAdd(newTechnician);
-        handleClose();
-    };
+            efficiency: Math.max(0, Math.min(100, Number(efficiency))) / 100,
+        });
+        reset();
+    });
 
     return (
         <BaseModal
@@ -45,16 +36,17 @@ export const AddTechnicianModal: React.FC<AddTechnicianModalProps> = ({ isOpen, 
             title="Add New Technician"
             footer={
                 <>
+                    {error && <p className="text-sm text-red-400 mr-auto self-center">{error}</p>}
                     <button type="button" onClick={handleClose} className="bg-slate-600 hover:bg-slate-500 text-white font-bold py-2 px-4 rounded-md transition-colors">
                         Cancel
                     </button>
-                    <button type="submit" form="add-tech-form" className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-md transition-colors">
+                    <button type="submit" form="add-tech-form" disabled={isSubmitting} className="bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-600 text-white font-bold py-2 px-4 rounded-md transition-colors">
                         Add Technician
                     </button>
                 </>
             }
         >
-            <form id="add-tech-form" onSubmit={handleSubmit} className="space-y-4">
+            <form id="add-tech-form" onSubmit={onSubmit} className="space-y-4">
                 <div>
                     <label htmlFor="name" className="block text-sm font-medium text-slate-300">Full Name</label>
                     <input

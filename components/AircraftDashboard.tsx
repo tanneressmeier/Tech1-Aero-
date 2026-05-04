@@ -9,6 +9,7 @@ import { PlaneIcon, SparklesIcon, ChevronDownIcon, ChevronUpIcon, ShieldCheckIco
 import { Logbook } from './Logbook.tsx';
 import { fetchAircraftADs } from '../services/geminiService.ts';
 import { useToast } from '../contexts/ToastContext.tsx';
+import { useAsyncAction } from '../hooks/useAsyncAction.ts';
 
 interface AircraftDashboardProps {
   aircraftList: Aircraft[];
@@ -158,23 +159,21 @@ export const AircraftDashboard: React.FC<AircraftDashboardProps> = ({
 }) => {
   const [selectedAircraftId, setSelectedAircraftId] = useState<string | null>(aircraftList.length > 0 ? aircraftList[0].id : null);
   const [isLogbookExpanded, setIsLogbookExpanded] = useState(false);
-  const [isFetchingADs, setIsFetchingADs] = useState(false);
   const { showToast } = useToast();
+  const syncADsAction = useAsyncAction();
 
   const selectedAircraft = aircraftList.find(ac => ac.id === selectedAircraftId);
   const selectedAircraftSchedule = selectedAircraft ? schedules[selectedAircraft.id] || null : null;
   const selectedAircraftForecast = selectedAircraft ? forecasts[selectedAircraft.id] || null : null;
 
-  const handleSyncADs = async () => {
+  const handleSyncADs = () => {
       if (!selectedAircraft) return;
-      setIsFetchingADs(true);
-      try {
+      syncADsAction.run(async () => {
           const ads = await fetchAircraftADs(selectedAircraft);
-          // Merge with existing ADs to avoid duplicates (naive check by AD number)
           const existingADs = selectedAircraft.ad_compliance || [];
           const existingAdNumbers = new Set(existingADs.map(ad => ad.ad_number));
           const newADs = ads.filter(ad => !existingAdNumbers.has(ad.ad_number));
-          
+
           if (newADs.length === 0) {
               showToast({ message: 'No new ADs found. System is up to date.', type: 'info' });
           } else {
@@ -185,11 +184,7 @@ export const AircraftDashboard: React.FC<AircraftDashboardProps> = ({
               onUpdateAircraft(updatedAircraft);
               showToast({ message: `Found ${newADs.length} new Airworthiness Directives.`, type: 'success' });
           }
-      } catch (error: any) {
-          showToast({ message: error.message || 'Failed to fetch ADs', type: 'error' });
-      } finally {
-          setIsFetchingADs(false);
-      }
+      }, 'Failed to fetch ADs');
   };
 
   return (
@@ -297,15 +292,15 @@ export const AircraftDashboard: React.FC<AircraftDashboardProps> = ({
                         </h3>
                         <button
                             onClick={handleSyncADs}
-                            disabled={isFetchingADs}
+                            disabled={syncADsAction.loading}
                             className="flex items-center gap-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 font-medium py-2 px-4 rounded-lg text-sm transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                            {isFetchingADs ? (
+                            {syncADsAction.loading ? (
                                 <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
                             ) : (
                                 <ArrowUpTrayIcon className="w-4 h-4"/>
                             )}
-                            {isFetchingADs ? 'Checking DRS...' : 'Check FAA DRS'}
+                            {syncADsAction.loading ? 'Checking DRS...' : 'Check FAA DRS'}
                         </button>
                     </div>
                     <div className="bg-slate-800/50 rounded-xl overflow-hidden border border-slate-700">

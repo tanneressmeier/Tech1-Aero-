@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
-// FIX: Corrected import path for types by adding the file extension.
 import { InventoryItem } from '../types.ts';
-// FIX: Added .tsx extension to component import.
 import { XMarkIcon } from './icons.tsx';
+import { useFormModal } from '../hooks/useFormModal.ts';
 
 interface ConsumableEditModalProps {
     isOpen: boolean;
@@ -28,6 +27,7 @@ const EMPTY_CONSUMABLE: Omit<InventoryItem, 'id'> = {
 
 export const ConsumableEditModal: React.FC<ConsumableEditModalProps> = ({ isOpen, onClose, consumable, onSave }) => {
     const [formData, setFormData] = useState<InventoryItem | Omit<InventoryItem, 'id'>>(EMPTY_CONSUMABLE);
+    const { isSubmitting, handleSubmit } = useFormModal(onClose);
 
     useEffect(() => {
         if (isOpen && consumable) {
@@ -50,16 +50,14 @@ export const ConsumableEditModal: React.FC<ConsumableEditModalProps> = ({ isOpen
         setFormData(prev => ({ ...prev, [name]: isNaN(numValue) ? 0 : numValue }));
     };
 
-    const handleSubmit = (e: React.FormEvent) => {
-        e.preventDefault();
+    const onSubmit = handleSubmit(() => {
         onSave(formData as InventoryItem);
-        onClose();
-    };
+    });
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center z-50 backdrop-blur-sm" onClick={onClose}>
             <div className="bg-slate-800 rounded-2xl shadow-2xl border border-slate-700 w-full max-w-lg transform transition-all" onClick={e => e.stopPropagation()}>
-                <form onSubmit={handleSubmit}>
+                <form onSubmit={onSubmit}>
                     <div className="p-6 border-b border-slate-700">
                         <div className="flex justify-between items-start">
                             <div>
@@ -107,7 +105,7 @@ export const ConsumableEditModal: React.FC<ConsumableEditModalProps> = ({ isOpen
                         <button type="button" onClick={onClose} className="bg-slate-600 hover:bg-slate-500 text-white font-bold py-2 px-4 rounded-md transition-colors">
                             Cancel
                         </button>
-                        <button type="submit" className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-md transition-colors">
+                        <button type="submit" disabled={isSubmitting} className="bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-600 text-white font-bold py-2 px-4 rounded-md transition-colors">
                             Save Changes
                         </button>
                     </div>

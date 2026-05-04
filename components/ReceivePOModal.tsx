@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { PurchaseOrder, PurchaseOrderItem, WorkOrder, RepairOrder } from '../types.ts';
 import { BaseModal } from './BaseModal.tsx';
 import { ShoppingCartIcon } from './icons.tsx';
+import { useFormModal } from '../hooks/useFormModal.ts';
 
 type CategorizedItem = PurchaseOrderItem & { category: 'part' | 'consumable' | 'tool' | 'unassigned' };
 
@@ -28,6 +29,7 @@ export const ReceivePOModal: React.FC<ReceivePOModalProps> = ({
 }) => {
     const [categorizedItems, setCategorizedItems] = useState<CategorizedItem[]>([]);
     const [selectedSquawkId, setSelectedSquawkId] = useState<string>('');
+    const { isSubmitting, runAction } = useFormModal(onClose);
 
     useEffect(() => {
         if (purchaseOrder) {
@@ -61,11 +63,10 @@ export const ReceivePOModal: React.FC<ReceivePOModalProps> = ({
         setCategorizedItems(prev => prev.map((item, i) => (i === index ? { ...item, category } : item)));
     };
 
-    const handleConfirm = () => {
+    const handleConfirm = runAction(() => {
         onConfirm(purchaseOrder, categorizedItems, selectedSquawkId || undefined);
-        onClose();
-    };
-    
+    });
+
     const canConfirm = categorizedItems.length > 0 && categorizedItems.every(item => item.category !== 'unassigned');
 
     return (
@@ -77,7 +78,7 @@ export const ReceivePOModal: React.FC<ReceivePOModalProps> = ({
             footer={
                 <>
                     <button type="button" onClick={onClose} className="bg-slate-600 hover:bg-slate-500 text-white font-bold py-2 px-4 rounded-md">Cancel</button>
-                    <button onClick={handleConfirm} disabled={!canConfirm} className="bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-600 disabled:cursor-not-allowed text-white font-bold py-2 px-4 rounded-md">
+                    <button onClick={handleConfirm} disabled={!canConfirm || isSubmitting} className="bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-600 disabled:cursor-not-allowed text-white font-bold py-2 px-4 rounded-md">
                         Confirm & Add to Inventory
                     </button>
                 </>

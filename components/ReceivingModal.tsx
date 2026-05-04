@@ -2,9 +2,10 @@ import React, { useState, useCallback } from 'react';
 import { Form8130, InventoryItem, Technician } from '../types.ts';
 import { analyze8130Form } from '../services/geminiService.ts';
 import { BaseModal } from './BaseModal.tsx';
-import { AlertBanner, ActionButton } from './ui.tsx';
+import { AlertBanner, ActionButton, SectionCard } from './ui.tsx';
 import { ArrowUpTrayIcon, ShieldCheckIcon, CheckBadgeIcon } from './icons.tsx';
 import { useToast } from '../contexts/ToastContext.tsx';
+import { useFormModal } from '../hooks/useFormModal.ts';
 
 interface ReceivingModalProps {
     isOpen:      boolean;
@@ -38,9 +39,8 @@ export const ReceivingModal: React.FC<ReceivingModalProps> = ({
 }) => {
     const { showToast } = useToast();
 
-    const [step,       setStep]       = useState<Step>('upload');
-    const [isLoading,  setIsLoading]  = useState(false);
-    const [error,      setError]      = useState<string | null>(null);
+    const [step, setStep] = useState<Step>('upload');
+    const { isSubmitting: isLoading, error, clearError, runAction } = useFormModal(onClose);
 
     // PDF state
     const [pdfDataUrl, setPdfDataUrl] = useState<string | null>(null);
@@ -84,7 +84,8 @@ export const ReceivingModal: React.FC<ReceivingModalProps> = ({
     const allChecked = Object.values(checks).every(Boolean);
 
     const reset = () => {
-        setStep('upload'); setIsLoading(false); setError(null);
+        setStep('upload');
+        clearError();
         setPdfDataUrl(null); setPdfB64(null); setPdfMime('');
         setInspectorCert(''); setInspNotes(''); setShelfLocation(''); setStorageArea('');
         setChecks({ physicalMatch: false, serialVerified: false, quantityMatch: false, noCorrosion: false, tagReadable: false });
@@ -92,11 +93,10 @@ export const ReceivingModal: React.FC<ReceivingModalProps> = ({
 
     const handleClose = () => { reset(); onClose(); };
 
-    const handleFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
-        setIsLoading(true); setError(null);
-        try {
+        runAction(async () => {
             const b64 = await blobToBase64(file);
             const dataUrl = URL.createObjectURL(file);
             setPdfDataUrl(dataUrl);
@@ -120,14 +120,10 @@ export const ReceivingModal: React.FC<ReceivingModalProps> = ({
                 block13b_cert_no:   extracted.block13b_cert_no   ?? '',
             });
             setStep('review');
-        } catch (err: any) {
-            setError(err.message ?? 'AI extraction failed. Upload a clearer image.');
-        } finally {
-            setIsLoading(false);
-        }
-    }, []);
+        }, false)(); // no auto-close — wizard advances step
+    }, [runAction]);
 
-    const handleRelease = () => {
+    const handleRelease = runAction(() => {
         if (!allChecked || !inspectorCert.trim() || !shelfLocation.trim()) return;
 
         const form: Form8130 = {
@@ -179,7 +175,7 @@ export const ReceivingModal: React.FC<ReceivingModalProps> = ({
         onReceive(form, newItem);
         showToast({ message: `${fields.block6_part_no} received — added to inventory at ${shelfLocation}`, type: 'success' });
         setStep('done');
-    };
+    }, false); // no auto-close — wizard shows 'done' step
 
     const Field: React.FC<{ label: string; value: string; onChange: (v: string) => void; mono?: boolean; wide?: boolean }> =
         ({ label, value, onChange, mono, wide }) => (
@@ -344,11 +340,11 @@ export const ReceivingModal: React.FC<ReceivingModalProps> = ({
             {/* ── Step: Assign ── */}
             {step === 'assign' && (
                 <div className="space-y-5">
-                    <div className="p-4 bg-white/3 border border-white/8 rounded-xl space-y-1 text-sm">
+                    <SectionCard padding="sm" className="space-y-1 text-sm">
                         <p className="font-semibold text-white">{fields.block6_part_no}</p>
                         <p className="text-slate-400">{fields.block6_description}</p>
                         <p className="text-slate-500 font-mono text-xs">{fields.block9_quantity} × {fields.block11_condition}</p>
-                    </div>
+                    </SectionCard>
 
                     <div className="grid grid-cols-2 gap-4">
                         <div>

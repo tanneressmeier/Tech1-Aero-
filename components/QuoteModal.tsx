@@ -6,6 +6,7 @@ import { BaseModal } from './BaseModal.tsx';
 import { SparklesIcon, DocumentArrowDownIcon, PencilIcon } from './icons.tsx';
 import { useToast } from '../contexts/ToastContext.tsx';
 import { useSettings } from '../contexts/SettingsContext.tsx';
+import { useFormModal } from '../hooks/useFormModal.ts';
 
 interface QuoteModalProps {
     isOpen: boolean;
@@ -17,34 +18,24 @@ interface QuoteModalProps {
 
 export const QuoteModal: React.FC<QuoteModalProps> = ({ isOpen, onClose, order, aircraft, inventory }) => {
     const [quote, setQuote] = useState<Quote | null>(null);
-    const [isLoading, setIsLoading] = useState(false);
     const [isExporting, setIsExporting] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const { isSubmitting: isLoading, error, clearError, runAction } = useFormModal(onClose);
     const { showToast } = useToast();
     const { settings } = useSettings();
 
     useEffect(() => {
-        if (isOpen) { setQuote(null); setError(null); setIsLoading(false); }
-    }, [isOpen]);
+        if (isOpen) { setQuote(null); clearError(); }
+    }, [isOpen, clearError]);
 
-    const handleGenerateQuote = async () => {
-        setIsLoading(true);
-        setError(null);
-        try {
-            const rates = {
-                laborRate:      settings.financials.laborRate,
-                shopSupplyRate: settings.financials.shopSupplies / 100,
-                taxRate:        settings.financials.taxRate / 100,
-            };
-            const result = await generateQuoteForOrder(order, aircraft, inventory, rates);
-            setQuote(result);
-        } catch (err: any) {
-            setError(err.message || 'An unknown error occurred.');
-            showToast({ message: err.message, type: 'error' });
-        } finally {
-            setIsLoading(false);
-        }
-    };
+    const handleGenerateQuote = runAction(async () => {
+        const rates = {
+            laborRate:      settings.financials.laborRate,
+            shopSupplyRate: settings.financials.shopSupplies / 100,
+            taxRate:        settings.financials.taxRate / 100,
+        };
+        const result = await generateQuoteForOrder(order, aircraft, inventory, rates);
+        setQuote(result);
+    }, false); // no auto-close — modal stays open to display quote
 
     const handleExportPDF = async () => {
         if (!quote) return;

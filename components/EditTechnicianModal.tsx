@@ -3,6 +3,7 @@ import { Technician, TrainingRecord, TrainingRequirement } from '../types.ts';
 import { BaseModal } from './BaseModal.tsx';
 import { PlusIcon, TrashIcon, CheckBadgeIcon } from './icons.tsx';
 import { AlertBanner, ActionButton } from './ui.tsx';
+import { useFormModal } from '../hooks/useFormModal.ts';
 
 interface Props {
     isOpen:               boolean;
@@ -22,6 +23,7 @@ export const EditTechnicianModal: React.FC<Props> = ({
     const [vacDates,   setVacDates]   = useState<string[]>([]);
     const [newVacDate, setNewVacDate] = useState('');
     const [trainings,  setTrainings]  = useState<TrainingRecord[]>([]);
+    const { isSubmitting, handleSubmit } = useFormModal(onClose);
 
     // Add training form
     const [addMode,    setAddMode]    = useState<'catalog' | 'custom' | null>(null);
@@ -40,9 +42,8 @@ export const EditTechnicianModal: React.FC<Props> = ({
         }
     }, [technician, isOpen]);
 
-    const handleSubmit = (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!technician || !name.trim()) return;
+    const onSubmit = handleSubmit(() => {
+        if (!technician || !name.trim()) throw new Error('Name is required.');
         onUpdate({
             ...technician,
             name:             name.trim(),
@@ -52,7 +53,7 @@ export const EditTechnicianModal: React.FC<Props> = ({
             vacation_dates:   vacDates.sort(),
             training_records: trainings,
         });
-    };
+    });
 
     const addFromCatalog = () => {
         if (!selReqId || !newTrain.completedDate) return;
@@ -114,10 +115,10 @@ export const EditTechnicianModal: React.FC<Props> = ({
             footer={
                 <>
                     <button type="button" onClick={onClose} className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white text-sm font-medium rounded-lg">Cancel</button>
-                    <button type="submit" form="edit-tech-form" className="px-4 py-2 bg-sky-600 hover:bg-sky-500 text-white text-sm font-medium rounded-lg">Save Changes</button>
+                    <button type="submit" form="edit-tech-form" disabled={isSubmitting} className="px-4 py-2 bg-sky-600 hover:bg-sky-500 disabled:bg-slate-600 text-white text-sm font-medium rounded-lg">Save Changes</button>
                 </>
             }>
-            <form id="edit-tech-form" onSubmit={handleSubmit} className="space-y-6">
+            <form id="edit-tech-form" onSubmit={onSubmit} className="space-y-6">
                 {/* Core fields */}
                 <div className="grid grid-cols-2 gap-4">
                     <div>

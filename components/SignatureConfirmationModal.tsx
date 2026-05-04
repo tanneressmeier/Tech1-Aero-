@@ -1,6 +1,7 @@
 import React from 'react';
 import { BaseModal } from './BaseModal.tsx';
 import { QuestionMarkCircleIcon } from './icons.tsx';
+import { useFormModal } from '../hooks/useFormModal.ts';
 
 interface SignatureConfirmationModalProps {
     isOpen: boolean;
@@ -10,6 +11,9 @@ interface SignatureConfirmationModalProps {
 }
 
 export const SignatureConfirmationModal: React.FC<SignatureConfirmationModalProps> = ({ isOpen, onClose, onConfirm, signatureTypeLabel }) => {
+    const { isSubmitting, runAction } = useFormModal(onClose);
+    const handleConfirm = runAction(onConfirm, false); // parent controls close after sign-off
+
     return (
         <BaseModal
             isOpen={isOpen}
@@ -21,7 +25,7 @@ export const SignatureConfirmationModal: React.FC<SignatureConfirmationModalProp
                     <button type="button" onClick={onClose} className="bg-slate-600 hover:bg-slate-500 text-white font-bold py-2 px-4 rounded-md transition-colors">
                         Cancel
                     </button>
-                    <button type="button" onClick={onConfirm} className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-md transition-colors">
+                    <button type="button" onClick={handleConfirm} disabled={isSubmitting} className="bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-600 text-white font-bold py-2 px-4 rounded-md transition-colors">
                         Confirm & Sign
                     </button>
                 </>

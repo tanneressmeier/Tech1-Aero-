@@ -1,4 +1,5 @@
-import React, { useState, useCallback } from 'react';
+import React, { useCallback } from 'react';
+import { useAsyncAction } from '../hooks/useAsyncAction.ts';
 // FIX: Corrected import paths for types and services by adding file extensions.
 import { Aircraft, MaintenanceEvent, OptimizedSchedule, OptimizedVisit, WorkOrder, MaintenanceForecast } from '../types.ts';
 import { generateOptimalSchedule } from '../services/geminiService.ts';
@@ -115,22 +116,15 @@ export const MaintenanceSchedule: React.FC<MaintenanceScheduleProps> = ({
     workOrders,
     onCreateWorkOrder
 }) => {
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const scheduleAction = useAsyncAction();
 
-  const handleOptimizeSchedule = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
+  const handleOptimizeSchedule = useCallback(() => {
     onScheduleGenerated(aircraft.id, null);
-    try {
+    scheduleAction.run(async () => {
       const result = await generateOptimalSchedule(aircraft, allSchedules);
       onScheduleGenerated(aircraft.id, result);
-    } catch (err: any) {
-      setError(err.message || "An unknown error occurred.");
-    } finally {
-      setIsLoading(false);
-    }
-  }, [aircraft, onScheduleGenerated, allSchedules]);
+    }, 'An unknown error occurred.');
+  }, [aircraft, onScheduleGenerated, allSchedules, scheduleAction]);
 
   return (
     <div className="mt-8">
@@ -141,10 +135,10 @@ export const MaintenanceSchedule: React.FC<MaintenanceScheduleProps> = ({
         </h3>
         <button
           onClick={handleOptimizeSchedule}
-          disabled={isLoading}
+          disabled={scheduleAction.loading}
           className="bg-cyan-500 hover:bg-cyan-600 disabled:bg-cyan-800 disabled:text-slate-400 disabled:cursor-not-allowed text-white font-bold py-2 px-4 rounded-lg flex items-center justify-center gap-2 transition-all duration-300 shadow-lg shadow-cyan-500/20"
         >
-          {isLoading ? (
+          {scheduleAction.loading ? (
             <>
               <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
@@ -161,7 +155,7 @@ export const MaintenanceSchedule: React.FC<MaintenanceScheduleProps> = ({
         </button>
       </div>
 
-      {error && <div className="mt-4 bg-red-500/20 border border-red-500 text-red-300 p-4 rounded-lg">{error}</div>}
+      {scheduleAction.error && <div className="mt-4 bg-red-500/20 border border-red-500 text-red-300 p-4 rounded-lg">{scheduleAction.error}</div>}
       
       {forecast && <MaintenanceForecastDisplay forecast={forecast} />}
       

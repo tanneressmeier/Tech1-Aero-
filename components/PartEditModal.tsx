@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { InventoryItem, PartCertification } from '../types.ts';
 import { BaseModal } from './BaseModal.tsx';
 import { XMarkIcon, PaperClipIcon, ShieldCheckIcon, DocumentTextIcon, CheckBadgeIcon } from './icons.tsx';
+import { useFormModal } from '../hooks/useFormModal.ts';
 
 interface PartEditModalProps {
     isOpen: boolean;
@@ -31,6 +32,7 @@ const EMPTY_PART: Omit<InventoryItem, 'id'> = {
 
 export const PartEditModal: React.FC<PartEditModalProps> = ({ isOpen, onClose, part, onSave }) => {
     const [formData, setFormData] = useState<InventoryItem | Omit<InventoryItem, 'id'>>(EMPTY_PART);
+    const { isSubmitting, handleSubmit } = useFormModal(onClose);
 
     useEffect(() => {
         if (isOpen && part) {
@@ -83,11 +85,9 @@ export const PartEditModal: React.FC<PartEditModalProps> = ({ isOpen, onClose, p
         }
     };
 
-    const handleSubmit = (e: React.FormEvent) => {
-        e.preventDefault();
+    const onSubmit = handleSubmit(() => {
         onSave(formData as InventoryItem);
-        onClose();
-    };
+    });
 
     return (
         <BaseModal
@@ -99,13 +99,13 @@ export const PartEditModal: React.FC<PartEditModalProps> = ({ isOpen, onClose, p
                     <button type="button" onClick={onClose} className="bg-slate-600 hover:bg-slate-500 text-white font-bold py-2 px-4 rounded-md transition-colors">
                         Cancel
                     </button>
-                    <button type="submit" form="edit-part-form" className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-md transition-colors">
+                    <button type="submit" form="edit-part-form" disabled={isSubmitting} className="bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-600 text-white font-bold py-2 px-4 rounded-md transition-colors">
                         Save Changes
                     </button>
                 </>
             }
         >
-            <form id="edit-part-form" onSubmit={handleSubmit} className="space-y-6">
+            <form id="edit-part-form" onSubmit={onSubmit} className="space-y-6">
                 {/* Basic Info Section */}
                 <div className="space-y-4">
                     <h3 className="text-lg font-medium text-white border-b border-white/10 pb-2">General Information</h3>
